@@ -1,0 +1,777 @@
+{
+  "save_time": "2025-10-21 14:52:32",
+  "results": {
+    "V0": {
+      "symbol": "V0",
+      "final_value": 519762.3845000001,
+      "total_return": 0.038763655833881035,
+      "sharpe_ratio": -0.17140755089751253,
+      "max_drawdown": 8.1681667578099,
+      "total_trades": 21,
+      "winning_trades": 5,
+      "losing_trades": 15
+    },
+    "P0": {
+      "symbol": "P0",
+      "final_value": 485650.1959999999,
+      "total_return": -0.02911949499110675,
+      "sharpe_ratio": -0.42211975351215797,
+      "max_drawdown": 9.913934123259526,
+      "total_trades": 19,
+      "winning_trades": 5,
+      "losing_trades": 14
+    },
+    "B0": {
+      "symbol": "B0",
+      "final_value": 503486.9293999999,
+      "total_return": 0.006949653915857218,
+      "sharpe_ratio": -0.8990439253259133,
+      "max_drawdown": 3.494962852874631,
+      "total_trades": 17,
+      "winning_trades": 5,
+      "losing_trades": 11
+    },
+    "M0": {
+      "symbol": "M0",
+      "final_value": 490044.1001000002,
+      "total_return": -0.020112711163212765,
+      "sharpe_ratio": -1.0132682426886825,
+      "max_drawdown": 5.25762786786144,
+      "total_trades": 24,
+      "winning_trades": 8,
+      "losing_trades": 15
+    },
+    "I0": {
+      "symbol": "I0",
+      "final_value": 496336.7865,
+      "total_return": -0.0073533970765659925,
+      "sharpe_ratio": -2.858945339401275,
+      "max_drawdown": 1.288442253309371,
+      "total_trades": 20,
+      "winning_trades": 6,
+      "losing_trades": 13
+    },
+    "JD0": {
+      "symbol": "JD0",
+      "final_value": 487508.9777,
+      "total_return": -0.025299392358986723,
+      "sharpe_ratio": -1.4100808754572347,
+      "max_drawdown": 3.59439417842918,
+      "total_trades": 27,
+      "winning_trades": 5,
+      "losing_trades": 21
+    },
+    "L0": {
+      "symbol": "L0",
+      "final_value": 494073.5251,
+      "total_return": -0.011923756074464881,
+      "sharpe_ratio": -1.1712232806472058,
+      "max_drawdown": 5.712121273185384,
+      "total_trades": 17,
+      "winning_trades": 3,
+      "losing_trades": 13
+    },
+    "PP0": {
+      "symbol": "PP0",
+      "final_value": 491595.9614999999,
+      "total_return": -0.016950935776260632,
+      "sharpe_ratio": -1.3206203236435743,
+      "max_drawdown": 5.762272279033927,
+      "total_trades": 16,
+      "winning_trades": 4,
+      "losing_trades": 11
+    },
+    "FB0": {
+      "symbol": "FB0",
+      "final_value": 487192.1138500001,
+      "total_return": -0.025949568836491892,
+      "sharpe_ratio": -4.271744512945493,
+      "max_drawdown": 2.621820846818034,
+      "total_trades": 31,
+      "winning_trades": 3,
+      "losing_trades": 27
+    },
+    "Y0": {
+      "symbol": "Y0",
+      "final_value": 501735.86880000005,
+      "total_return": 0.003465725031041083,
+      "sharpe_ratio": -0.4118290083078718,
+      "max_drawdown": 6.627031889633512,
+      "total_trades": 15,
+      "winning_trades": 4,
+      "losing_trades": 11
+    },
+    "C0": {
+      "symbol": "C0",
+      "final_value": 509302.1298999999,
+      "total_return": 0.018433317474152142,
+      "sharpe_ratio": -1.2443241628622665,
+      "max_drawdown": 1.4568987717099242,
+      "total_trades": 16,
+      "winning_trades": 7,
+      "losing_trades": 8
+    },
+    "A0": {
+      "symbol": "A0",
+      "final_value": 475099.8485000004,
+      "total_return": -0.05108310910960191,
+      "sharpe_ratio": -1.775975420839359,
+      "max_drawdown": 6.489438714196739,
+      "total_trades": 30,
+      "winning_trades": 5,
+      "losing_trades": 24
+    },
+    "J0": {
+      "symbol": "J0",
+      "final_value": 487632.62465,
+      "total_return": -0.025045794419231743,
+      "sharpe_ratio": -1.4163614072766493,
+      "max_drawdown": 4.040088073939392,
+      "total_trades": 25,
+      "winning_trades": 7,
+      "losing_trades": 17
+    },
+    "JM0": {
+      "symbol": "JM0",
+      "final_value": 508122.5055999999,
+      "total_return": 0.016114472839543578,
+      "sharpe_ratio": -0.7132070239166955,
+      "max_drawdown": 4.214941577948678,
+      "total_trades": 21,
+      "winning_trades": 7,
+      "losing_trades": 13
+    },
+    "CS0": {
+      "symbol": "CS0",
+      "final_value": 494958.0809000001,
+      "total_return": -0.01013502448998764,
+      "sharpe_ratio": -2.1441698317633224,
+      "max_drawdown": 2.3818631528986756,
+      "total_trades": 21,
+      "winning_trades": 5,
+      "losing_trades": 15
+    },
+    "EG0": {
+      "symbol": "EG0",
+      "final_value": 484885.0414000001,
+      "total_return": -0.030696263621531324,
+      "sharpe_ratio": -1.1370945560824055,
+      "max_drawdown": 8.429181980838502,
+      "total_trades": 29,
+      "winning_trades": 7,
+      "losing_trades": 21
+    },
+    "RR0": {
+      "symbol": "RR0",
+      "final_value": 490035.81500000006,
+      "total_return": -0.020129618151862812,
+      "sharpe_ratio": -3.6498603092121193,
+      "max_drawdown": 2.052836999999988,
+      "total_trades": 21,
+      "winning_trades": 3,
+      "losing_trades": 17
+    },
+    "EB0": {
+      "symbol": "EB0",
+      "final_value": 509149.44920000003,
+      "total_return": 0.01813348839189263,
+      "sharpe_ratio": -0.3717116703879731,
+      "max_drawdown": 8.156012328316566,
+      "total_trades": 25,
+      "winning_trades": 8,
+      "losing_trades": 16
+    },
+    "PG0": {
+      "symbol": "PG0",
+      "final_value": 487233.68609999993,
+      "total_return": -0.02586424217533986,
+      "sharpe_ratio": -0.8010220329759133,
+      "max_drawdown": 5.34196866186407,
+      "total_trades": 19,
+      "winning_trades": 4,
+      "losing_trades": 14
+    },
+    "LH0": {
+      "symbol": "LH0",
+      "final_value": 692934.1084999995,
+      "total_return": 0.326326814717594,
+      "sharpe_ratio": 0.8796412758322921,
+      "max_drawdown": 11.127142109073288,
+      "total_trades": 19,
+      "winning_trades": 8,
+      "losing_trades": 10
+    },
+    "LG0": {
+      "symbol": "LG0",
+      "final_value": 501214.5846,
+      "total_return": 0.0024262235378756337,
+      "sharpe_ratio": -7.233267571480739,
+      "max_drawdown": 0.1276884634099214,
+      "total_trades": 3,
+      "winning_trades": 2,
+      "losing_trades": 0
+    },
+    "BZ0": {
+      "error": ""
+    },
+    "TA0": {
+      "symbol": "TA0",
+      "final_value": 513879.09259999986,
+      "total_return": 0.02737991095776331,
+      "sharpe_ratio": -0.258830504606303,
+      "max_drawdown": 4.609897202415815,
+      "total_trades": 22,
+      "winning_trades": 4,
+      "losing_trades": 17
+    },
+    "OI0": {
+      "symbol": "OI0",
+      "final_value": 533761.2296999998,
+      "total_return": 0.06534050514990582,
+      "sharpe_ratio": 0.05507786018617194,
+      "max_drawdown": 6.359349552271112,
+      "total_trades": 16,
+      "winning_trades": 6,
+      "losing_trades": 9
+    },
+    "RS0": {
+      "symbol": "RS0",
+      "final_value": 491371.2616,
+      "total_return": -0.01740812274777552,
+      "sharpe_ratio": -0.8782335909092303,
+      "max_drawdown": 4.302707791293194,
+      "total_trades": 26,
+      "winning_trades": 8,
+      "losing_trades": 18
+    },
+    "RM0": {
+      "symbol": "RM0",
+      "final_value": 501371.3992,
+      "total_return": 0.002739043792322764,
+      "sharpe_ratio": -1.5201417665823174,
+      "max_drawdown": 2.424251992238988,
+      "total_trades": 15,
+      "winning_trades": 5,
+      "losing_trades": 10
+    },
+    "WH0": {
+      "symbol": "WH0",
+      "final_value": 502583.70690000005,
+      "total_return": 0.005154108533504907,
+      "sharpe_ratio": -1.8432117555114413,
+      "max_drawdown": 1.2691815171737166,
+      "total_trades": 11,
+      "winning_trades": 3,
+      "losing_trades": 8
+    },
+    "JR0": {
+      "symbol": "JR0",
+      "final_value": 497177.8181999999,
+      "total_return": -0.005660353216082129,
+      "sharpe_ratio": -4.177163319416486,
+      "max_drawdown": 1.2436036710717944,
+      "total_trades": 4,
+      "winning_trades": 2,
+      "losing_trades": 2
+    },
+    "SR0": {
+      "symbol": "SR0",
+      "final_value": 493985.57529999997,
+      "total_return": -0.012101781458162517,
+      "sharpe_ratio": -1.5248759876330602,
+      "max_drawdown": 4.073275273022402,
+      "total_trades": 21,
+      "winning_trades": 4,
+      "losing_trades": 16
+    },
+    "CF0": {
+      "symbol": "CF0",
+      "final_value": 561339.2874999999,
+      "total_return": 0.11571741484098769,
+      "sharpe_ratio": 0.329739764992569,
+      "max_drawdown": 7.387953884307085,
+      "total_trades": 20,
+      "winning_trades": 8,
+      "losing_trades": 11
+    },
+    "RI0": {
+      "symbol": "RI0",
+      "final_value": 494797.1515999999,
+      "total_return": -0.010460214589790094,
+      "sharpe_ratio": -5.626205853601481,
+      "max_drawdown": 1.220297156414515,
+      "total_trades": 6,
+      "winning_trades": 0,
+      "losing_trades": 5
+    },
+    "MA0": {
+      "symbol": "MA0",
+      "final_value": 495741.5771,
+      "total_return": -0.008553321383464926,
+      "sharpe_ratio": -1.522031816348842,
+      "max_drawdown": 2.373286064894098,
+      "total_trades": 17,
+      "winning_trades": 5,
+      "losing_trades": 12
+    },
+    "FG0": {
+      "symbol": "FG0",
+      "final_value": 511121.82999999996,
+      "total_return": 0.02199987823800183,
+      "sharpe_ratio": -0.4140252319401051,
+      "max_drawdown": 2.6501000084683626,
+      "total_trades": 25,
+      "winning_trades": 7,
+      "losing_trades": 17
+    },
+    "LR0": {
+      "symbol": "LR0",
+      "final_value": 498277.3779,
+      "total_return": -0.0034511927204656707,
+      "sharpe_ratio": -1.3855115050857678,
+      "max_drawdown": 1.229708345681997,
+      "total_trades": 5,
+      "winning_trades": 0,
+      "losing_trades": 4
+    },
+    "SF0": {
+      "symbol": "SF0",
+      "final_value": 447266.83460000006,
+      "total_return": -0.11145273649579192,
+      "sharpe_ratio": -0.9864678368609691,
+      "max_drawdown": 25.958039051882164,
+      "total_trades": 23,
+      "winning_trades": 5,
+      "losing_trades": 18
+    },
+    "SM0": {
+      "symbol": "SM0",
+      "final_value": 527751.9078,
+      "total_return": 0.054018203268913226,
+      "sharpe_ratio": -0.029268405041444907,
+      "max_drawdown": 7.440898276009712,
+      "total_trades": 21,
+      "winning_trades": 7,
+      "losing_trades": 14
+    },
+    "CY0": {
+      "symbol": "CY0",
+      "final_value": 462748.14449999994,
+      "total_return": -0.07742515670109718,
+      "sharpe_ratio": -1.487604472869151,
+      "max_drawdown": 13.356864151347779,
+      "total_trades": 23,
+      "winning_trades": 5,
+      "losing_trades": 18
+    },
+    "AP0": {
+      "symbol": "AP0",
+      "final_value": 492840.17629999993,
+      "total_return": -0.014423162943200887,
+      "sharpe_ratio": -0.5126343865447842,
+      "max_drawdown": 8.837007339496536,
+      "total_trades": 19,
+      "winning_trades": 6,
+      "losing_trades": 13
+    },
+    "CJ0": {
+      "symbol": "CJ0",
+      "final_value": 622553.4755000003,
+      "total_return": 0.2192214306447689,
+      "sharpe_ratio": 0.6308236298680009,
+      "max_drawdown": 7.184702465599582,
+      "total_trades": 22,
+      "winning_trades": 8,
+      "losing_trades": 13
+    },
+    "UR0": {
+      "symbol": "UR0",
+      "final_value": 492271.51300000004,
+      "total_return": -0.015577678455180094,
+      "sharpe_ratio": -2.6382245424837767,
+      "max_drawdown": 3.2450885744402114,
+      "total_trades": 20,
+      "winning_trades": 5,
+      "losing_trades": 15
+    },
+    "SA0": {
+      "symbol": "SA0",
+      "final_value": 492430.4492999999,
+      "total_return": -0.015254867477919903,
+      "sharpe_ratio": -0.9692409015519075,
+      "max_drawdown": 4.322882967345228,
+      "total_trades": 24,
+      "winning_trades": 5,
+      "losing_trades": 18
+    },
+    "PF0": {
+      "symbol": "PF0",
+      "final_value": 491995.09099999996,
+      "total_return": -0.016139359621937178,
+      "sharpe_ratio": -0.6689168043621221,
+      "max_drawdown": 7.458003341600985,
+      "total_trades": 18,
+      "winning_trades": 5,
+      "losing_trades": 12
+    },
+    "PK0": {
+      "symbol": "PK0",
+      "final_value": 490705.6222,
+      "total_return": -0.01876369788229081,
+      "sharpe_ratio": -0.7382999153597251,
+      "max_drawdown": 5.046142518278278,
+      "total_trades": 19,
+      "winning_trades": 3,
+      "losing_trades": 16
+    },
+    "SH0": {
+      "symbol": "SH0",
+      "final_value": 495855.63180000003,
+      "total_return": -0.008323278984234028,
+      "sharpe_ratio": -1.2457119614637893,
+      "max_drawdown": 1.7747766065590362,
+      "total_trades": 9,
+      "winning_trades": 2,
+      "losing_trades": 6
+    },
+    "PX0": {
+      "symbol": "PX0",
+      "final_value": 491910.16640000005,
+      "total_return": -0.016311987219100717,
+      "sharpe_ratio": -2.8268971437874613,
+      "max_drawdown": 2.5164049791271013,
+      "total_trades": 7,
+      "winning_trades": 2,
+      "losing_trades": 4
+    },
+    "PR0": {
+      "symbol": "PR0",
+      "final_value": 494795.76720000006,
+      "total_return": -0.01046301250795131,
+      "sharpe_ratio": -2.921512811648269,
+      "max_drawdown": 1.204846559999988,
+      "total_trades": 4,
+      "winning_trades": 0,
+      "losing_trades": 3
+    },
+    "PL0": {
+      "error": ""
+    },
+    "FU0": {
+      "symbol": "FU0",
+      "final_value": 510380.10109999997,
+      "total_return": 0.020547645975339708,
+      "sharpe_ratio": -0.4031954557421766,
+      "max_drawdown": 2.447179869648515,
+      "total_trades": 18,
+      "winning_trades": 6,
+      "losing_trades": 11
+    },
+    "SC0": {
+      "symbol": "SC0",
+      "final_value": 501154.3690000002,
+      "total_return": 0.0023060769594007643,
+      "sharpe_ratio": -7.880448096373495,
+      "max_drawdown": 0.7129580107503642,
+      "total_trades": 17,
+      "winning_trades": 5,
+      "losing_trades": 11
+    },
+    "AL0": {
+      "symbol": "AL0",
+      "final_value": 534156.6464999999,
+      "total_return": 0.06608104302624057,
+      "sharpe_ratio": 0.04661761810435188,
+      "max_drawdown": 13.395155109816468,
+      "total_trades": 26,
+      "winning_trades": 10,
+      "losing_trades": 15
+    },
+    "RU0": {
+      "symbol": "RU0",
+      "final_value": 545307.1445,
+      "total_return": 0.08674110538621693,
+      "sharpe_ratio": 0.15837908187303024,
+      "max_drawdown": 10.70834378311453,
+      "total_trades": 16,
+      "winning_trades": 7,
+      "losing_trades": 8
+    },
+    "ZN0": {
+      "symbol": "ZN0",
+      "final_value": 378493.96400000004,
+      "total_return": -0.278407972831687,
+      "sharpe_ratio": -2.2812297794153746,
+      "max_drawdown": 28.751998772975437,
+      "total_trades": 24,
+      "winning_trades": 5,
+      "losing_trades": 19
+    },
+    "CU0": {
+      "symbol": "CU0",
+      "final_value": 594913.2440000005,
+      "total_return": 0.17380748808899896,
+      "sharpe_ratio": 0.20309152338169467,
+      "max_drawdown": 36.743451043967035,
+      "total_trades": 21,
+      "winning_trades": 3,
+      "losing_trades": 17
+    },
+    "AU0": {
+      "symbol": "AU0",
+      "final_value": 498964.3928419992,
+      "total_return": -0.0020733622467688467,
+      "sharpe_ratio": -28.911218475813612,
+      "max_drawdown": 0.2876504779330806,
+      "total_trades": 12,
+      "winning_trades": 2,
+      "losing_trades": 10
+    },
+    "RB0": {
+      "symbol": "RB0",
+      "final_value": 501164.8929999999,
+      "total_return": 0.002327076256529039,
+      "sharpe_ratio": -0.7686824331629135,
+      "max_drawdown": 5.191785586983673,
+      "total_trades": 19,
+      "winning_trades": 8,
+      "losing_trades": 11
+    },
+    "PB0": {
+      "symbol": "PB0",
+      "final_value": 458442.7510000001,
+      "total_return": -0.08677267602642595,
+      "sharpe_ratio": -2.1191639949985346,
+      "max_drawdown": 11.752374305552062,
+      "total_trades": 18,
+      "winning_trades": 2,
+      "losing_trades": 16
+    },
+    "AG0": {
+      "symbol": "AG0",
+      "final_value": 477024.30470000015,
+      "total_return": -0.04704065558244698,
+      "sharpe_ratio": -2.2412039301618933,
+      "max_drawdown": 8.129913880648687,
+      "total_trades": 22,
+      "winning_trades": 4,
+      "losing_trades": 18
+    },
+    "BU0": {
+      "symbol": "BU0",
+      "final_value": 502533.91160000005,
+      "total_return": 0.005055025005121243,
+      "sharpe_ratio": -0.721554799254389,
+      "max_drawdown": 3.539584603879156,
+      "total_trades": 24,
+      "winning_trades": 6,
+      "losing_trades": 17
+    },
+    "HC0": {
+      "symbol": "HC0",
+      "final_value": 513194.72980000003,
+      "total_return": 0.02604726497583528,
+      "sharpe_ratio": -0.4710048487100029,
+      "max_drawdown": 5.410613760827239,
+      "total_trades": 19,
+      "winning_trades": 7,
+      "losing_trades": 11
+    },
+    "SN0": {
+      "symbol": "SN0",
+      "final_value": 2128846.693,
+      "total_return": 1.448727554954143,
+      "sharpe_ratio": 0.5010214102492182,
+      "max_drawdown": 43.355582141862136,
+      "total_trades": 15,
+      "winning_trades": 3,
+      "losing_trades": 11
+    },
+    "NI0": {
+      "symbol": "NI0",
+      "final_value": -1114.9789999999412,
+      "total_return": -Infinity,
+      "sharpe_ratio": -0.8057293002646057,
+      "max_drawdown": 100.1917937831284,
+      "total_trades": 8,
+      "winning_trades": 1,
+      "losing_trades": 7
+    },
+    "SP0": {
+      "symbol": "SP0",
+      "final_value": 500415.2907999999,
+      "total_return": 0.0008302368579804074,
+      "sharpe_ratio": -0.6469682248692329,
+      "max_drawdown": 6.468968096610147,
+      "total_trades": 21,
+      "winning_trades": 4,
+      "losing_trades": 17
+    },
+    "NR0": {
+      "symbol": "NR0",
+      "final_value": 492408.94449999987,
+      "total_return": -0.01529853916721019,
+      "sharpe_ratio": -0.23793419285849193,
+      "max_drawdown": 13.820369931865994,
+      "total_trades": 19,
+      "winning_trades": 5,
+      "losing_trades": 13
+    },
+    "SS0": {
+      "symbol": "SS0",
+      "final_value": 462791.5355,
+      "total_return": -0.07733139302792467,
+      "sharpe_ratio": -0.6175692805158319,
+      "max_drawdown": 9.546490968965175,
+      "total_trades": 20,
+      "winning_trades": 6,
+      "losing_trades": 14
+    },
+    "LU0": {
+      "symbol": "LU0",
+      "final_value": 510506.6313000002,
+      "total_return": 0.02079552891206989,
+      "sharpe_ratio": -0.2810922777284168,
+      "max_drawdown": 5.425316860226582,
+      "total_trades": 18,
+      "winning_trades": 3,
+      "losing_trades": 14
+    },
+    "BC0": {
+      "symbol": "BC0",
+      "final_value": 473672.00799999986,
+      "total_return": -0.054092982490982336,
+      "sharpe_ratio": -0.2907867976915108,
+      "max_drawdown": 40.22528137801433,
+      "total_trades": 18,
+      "winning_trades": 3,
+      "losing_trades": 14
+    },
+    "AO0": {
+      "symbol": "AO0",
+      "final_value": 502955.64439999993,
+      "total_return": 0.005893885681920899,
+      "sharpe_ratio": -0.554246162567324,
+      "max_drawdown": 2.542551930219585,
+      "total_trades": 7,
+      "winning_trades": 2,
+      "losing_trades": 4
+    },
+    "BR0": {
+      "symbol": "BR0",
+      "final_value": 494572.20099999994,
+      "total_return": -0.010914949928589891,
+      "sharpe_ratio": -0.9411880745704023,
+      "max_drawdown": 7.55672799234163,
+      "total_trades": 11,
+      "winning_trades": 4,
+      "losing_trades": 6
+    },
+    "EC0": {
+      "symbol": "EC0",
+      "final_value": 516778.8278300001,
+      "total_return": 0.03300688538578894,
+      "sharpe_ratio": 0.05485026874049276,
+      "max_drawdown": 6.750690417217008,
+      "total_trades": 11,
+      "winning_trades": 3,
+      "losing_trades": 7
+    },
+    "AD0": {
+      "error": ""
+    },
+    "OP0": {
+      "error": "array assignment index out of range"
+    },
+    "IF0": {
+      "symbol": "IF0",
+      "final_value": 507969.3457400001,
+      "total_return": 0.01581300430408027,
+      "sharpe_ratio": -0.6705262997457141,
+      "max_drawdown": 2.279282783724247,
+      "total_trades": 20,
+      "winning_trades": 5,
+      "losing_trades": 15
+    },
+    "TF0": {
+      "symbol": "TF0",
+      "final_value": 500015.80261249986,
+      "total_return": 3.160472556518618e-05,
+      "sharpe_ratio": -297.920690816433,
+      "max_drawdown": 0.007371614871775077,
+      "total_trades": 17,
+      "winning_trades": 5,
+      "losing_trades": 12
+    },
+    "IH0": {
+      "symbol": "IH0",
+      "final_value": 506477.98674,
+      "total_return": 0.012872762801830166,
+      "sharpe_ratio": -0.9975714436743314,
+      "max_drawdown": 1.888544694022875,
+      "total_trades": 22,
+      "winning_trades": 5,
+      "losing_trades": 16
+    },
+    "IC0": {
+      "symbol": "IC0",
+      "final_value": 495118.07106000005,
+      "total_return": -0.00981183690269788,
+      "sharpe_ratio": -1.2810347872521466,
+      "max_drawdown": 5.015299983803549,
+      "total_trades": 24,
+      "winning_trades": 6,
+      "losing_trades": 17
+    },
+    "TS0": {
+      "symbol": "TS0",
+      "final_value": 500004.8954448006,
+      "total_return": 9.790841670844304e-06,
+      "sharpe_ratio": -1239.8918258926021,
+      "max_drawdown": 0.003418015378828368,
+      "total_trades": 19,
+      "winning_trades": 6,
+      "losing_trades": 13
+    },
+    "IM0": {
+      "symbol": "IM0",
+      "final_value": 514572.6736,
+      "total_return": 0.028728697800166694,
+      "sharpe_ratio": -0.42880198002713854,
+      "max_drawdown": 3.9511860365248443,
+      "total_trades": 13,
+      "winning_trades": 5,
+      "losing_trades": 7
+    },
+    "SI0": {
+      "symbol": "SI0",
+      "final_value": 566181.5190000001,
+      "total_return": 0.12430663331314874,
+      "sharpe_ratio": 0.699104994611184,
+      "max_drawdown": 5.1421424973234195,
+      "total_trades": 8,
+      "winning_trades": 4,
+      "losing_trades": 3
+    },
+    "LC0": {
+      "symbol": "LC0",
+      "final_value": 1196293.5300000005,
+      "total_return": 0.8723752323976531,
+      "sharpe_ratio": 0.6906075522154393,
+      "max_drawdown": 30.905401204619174,
+      "total_trades": 6,
+      "winning_trades": 3,
+      "losing_trades": 2
+    },
+    "PS0": {
+      "symbol": "PS0",
+      "final_value": 666679.113,
+      "total_return": 0.28770074177750804,
+      "sharpe_ratio": 0.9400044803454167,
+      "max_drawdown": 12.851160867322266,
+      "total_trades": 3,
+      "winning_trades": 1,
+      "losing_trades": 1
+    }
+  }
+}
