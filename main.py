@@ -39,7 +39,7 @@ if __name__ == '__main__':
     init_logging()
     
     # 回测参数
-    SYMBOL = "SA2601"  # 主力合约
+    SYMBOL = "FG0"  # 主力合约
     START_DATE = "2020-01-01"
     END_DATE = "2025-12-31"
     DB_PATH = "E:\\db\\futures_data.db"  # 你的数据库路径
