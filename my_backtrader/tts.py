@@ -1,5 +1,6 @@
 import logging
 import backtrader as bt
+import numpy as np
 import pandas as pd
 from custom_indicators.mac_indicator import MovingAverageCrossOver
 from custom_indicators.force_indicator import ForceIndex
@@ -27,6 +28,8 @@ class TripleScreenTradingSystem(bt.Strategy):
         ('stage3_trail', 0.02),       # 回撤2%平仓
         ('symbol', ''),       # 商品代号
         ('max_hold_days', 21),        # 最大持仓30天
+        ('oi_lookback', 252*10),         # 持仓量分位数计算周期（5年）
+        ('oi_threshold', 0.7),        # 持仓量高位阈值
     )
     
     def __init__(self):
@@ -37,6 +40,10 @@ class TripleScreenTradingSystem(bt.Strategy):
         self.atr = bt.indicators.ATR(self.data, period=self.p.atr_period)
         dmi = bt.indicators.DirectionalMovementIndex(period = self.p.adx_period)
         self.adx = dmi.lines.adx
+        
+        # 持仓量分析指标
+        self.volume = self.data.volume
+        self.open_interest = self.data.openinterest
         
         # 分析报告
         self.analysis_reports = []
@@ -68,12 +75,76 @@ class TripleScreenTradingSystem(bt.Strategy):
         
         # 添加状态跟踪
         self.position_opened = False  # 标记是否已开仓
+        
+        # 持仓量历史数据存储
+        self.oi_history = []
+        self.volume_history = []
 
     def log(self, txt, dt=None, doprint=False):
         '''正确的日志函数'''
         if self.params.printlog or doprint:
             dt = dt or self.data.datetime.date(0)
             print(f'{dt.isoformat()}: {txt}')
+    
+    def calculate_oi_quantile(self, current_oi, lookback_period=252):
+        """
+        计算当前持仓量在历史中的分位数位置
+        """
+        if len(self.oi_history) < lookback_period:
+            # 数据不足时返回中性值
+            return 0.5
+        
+        # 计算当前持仓量在历史中的分位数
+        oi_array = np.array(self.oi_history[-lookback_period:])
+        quantile = np.sum(oi_array <= current_oi) / len(oi_array)
+        return quantile
+    
+    def analyze_market_strength(self, price_change, volume_change, oi_change, oi_quantile):
+        """
+        分析市场强度基于价格、成交量、持仓量关系
+        返回: 市场强度描述和分数 (1: 坚挺, -1: 疲软, 0: 中性)
+        """
+        # 规则1: 价格上涨 + 成交量增加 + 持仓兴趣上升 = 坚挺
+        if price_change > 0 and volume_change > 0 and oi_change > 0:
+            return "市场坚挺: 价涨量增仓升", 1
+        
+        # 规则2: 价格上涨 + 成交量减少 + 持仓兴趣下降 = 疲软
+        elif price_change > 0 and volume_change < 0 and oi_change < 0:
+            return "市场疲软: 价涨量减仓降", -1
+        
+        # 规则3: 价格下跌 + 成交量减少 + 持仓兴趣下降 = 坚挺
+        elif price_change < 0 and volume_change < 0 and oi_change < 0:
+            return "市场坚挺: 价跌量减仓降", 1
+        
+        # 规则4: 价格下跌 + 成交量增加 + 持仓兴趣上升 = 疲软
+        elif price_change < 0 and volume_change > 0 and oi_change > 0:
+            return "市场疲软: 价跌量增仓升", -1
+        
+        # 考虑持仓量分位数
+        elif oi_quantile > self.p.oi_threshold:
+            return f"持仓量极端高位({oi_quantile:.1%})，谨慎操作", -1
+        elif oi_quantile < 0.3:
+            return f"持仓量极端低位({oi_quantile:.1%})，可能存在机会", 1
+        else:
+            return "市场中性: 信号不明确", 0
+
+    def get_volume_change(self):
+        """计算成交量变化率"""
+        if len(self.volume) < 2:
+            return 0
+        return (self.volume[0] - self.volume[-1]) / self.volume[-1] if self.volume[-1] != 0 else 0
+
+    def get_oi_change(self):
+        """计算持仓量变化率"""
+        if len(self.open_interest) < 2:
+            return 0
+        return (self.open_interest[0] - self.open_interest[-1]) / self.open_interest[-1] if self.open_interest[-1] != 0 else 0
+
+    def get_price_change(self):
+        """计算价格变化率"""
+        if len(self.data.close) < 2:
+            return 0
+        return (self.data.close[0] - self.data.close[-1]) / self.data.close[-1] if self.data.close[-1] != 0 else 0
     
     def reset_stop_variables(self):
         """
@@ -193,32 +264,69 @@ class TripleScreenTradingSystem(bt.Strategy):
         '''
             三重系统过滤分析
         '''
+        
+        # 收集历史数据
+        if len(self.open_interest) > 0:
+            self.oi_history.append(float(self.open_interest[0]))
+        if len(self.volume) > 0:
+            self.volume_history.append(float(self.volume[0]))
+        
+        # 限制历史数据长度
+        max_history = self.p.oi_lookback * 2
+        if len(self.oi_history) > max_history:
+            self.oi_history = self.oi_history[-max_history:]
+        if len(self.volume_history) > max_history:
+            self.volume_history = self.volume_history[-max_history:]
+        
         trend_info = self.trend.get_trend_info() if hasattr(self.trend, 'get_trend_info') else {}
         current_trend = int(self.trend.lines.trend[0])
         current_force = float(self.force.lines.force[0]) if len(self.force) > 0 else 0
         
+        # 计算持仓量分位数
+        current_oi = float(self.open_interest[0]) if len(self.open_interest) > 0 else 0
+        oi_quantile = self.calculate_oi_quantile(current_oi, self.p.oi_lookback)
+        
+        # 计算变化率
+        price_change = self.get_price_change()
+        volume_change = self.get_volume_change()
+        oi_change = self.get_oi_change()
+        
+        # 分析市场强度
+        market_strength_text, market_strength_score = self.analyze_market_strength(
+            price_change, volume_change, oi_change, oi_quantile
+        )
+        
         report = {
-            'date': self.data.datetime.date(0).strftime('%Y-%m-%d'),
-            'symbol_name': self.data._name or '未知商品',
-            'symbol': self.p.symbol,
-            'close_price': float(self.data.close[0]),
-            'trend': current_trend,
-            'trend_text': self.get_trend_text(current_trend),
-            'trend_start_date': trend_info.get('trend_start_date', '未知'),
-            'trend_start_price': float(trend_info.get('trend_start_price', 0)),
-            'trend_duration': trend_info.get('trend_duration', 0),
-            'rsi': round(float(self.rsi[0]), 2) if len(self.rsi) > 0 else 0,
-            'atr': round(float(self.atr[0]), 3) if len(self.atr) > 0 else 0,
-            'atr_percent': round((float(self.atr[0]) / float(self.data.close[0]) * 100), 2) if len(self.atr) > 0 and self.data.close[0] != 0 else 0,
-            'force_index': round(current_force, 2),
-            'adx': round(float(self.adx[0]), 2) if len(self.adx) > 0 else 0,
-            'buy_signal': 0,
-            'sell_signal': 0,
-            'signal_strength': 0  # 信号强度 0-100
-        }
+                'date': self.data.datetime.date(0).strftime('%Y-%m-%d'),
+                'symbol_name': self.data._name or '未知商品',
+                'symbol': self.params.symbol,
+                'close_price': float(self.data.close[0]),
+                'trend': current_trend,
+                'trend_text': self.get_trend_text(current_trend),
+                'trend_start_date': trend_info.get('trend_start_date', '未知'),
+                'trend_start_price': float(trend_info.get('trend_start_price', 0)),
+                'trend_duration': trend_info.get('trend_duration', 0),
+                'rsi': round(float(self.rsi[0]), 2) if len(self.rsi) > 0 else 0,
+                'atr': round(float(self.atr[0]), 3) if len(self.atr) > 0 else 0,
+                'atr_percent': round((float(self.atr[0]) / float(self.data.close[0]) * 100), 2) if len(self.atr) > 0 and self.data.close[0] != 0 else 0,
+                'force_index': round(current_force, 2),
+                'adx': round(float(self.adx[0]), 2) if len(self.adx) > 0 else 0,
+                
+                # 新增持仓量相关字段
+                'volume': float(self.volume[0]) if len(self.volume) > 0 else 0,
+                'volume_change_pct': round(volume_change * 100, 2),
+                'open_interest': current_oi,
+                'oi_change_pct': round(oi_change * 100, 2),
+                'oi_quantile': round(oi_quantile * 100, 2),
+                'market_strength': market_strength_text,
+                'market_strength_score': market_strength_score,
+                'buy_signal': 0,
+                'sell_signal': 0,
+                'signal_strength': 0  # 信号强度 0-100
+            }
+    
         signal_strength = 0
         
-        # 修正后的力量指数状态判断
         if current_trend == 1:  # 趋势向上
             if current_force < 0:
                 report['force_status'] = "回调买入机会"
@@ -243,6 +351,17 @@ class TripleScreenTradingSystem(bt.Strategy):
             if self.rsi[0] < 70:  # RSI不过热
                 conditions_met += 1
                 signal_strength += 20
+            
+            # 第四重：持仓量确认（新增）
+            if market_strength_score > 0:  # 市场坚挺
+                conditions_met += 1
+                signal_strength += 30
+                report['oi_signal'] = "持仓量支撑做多"
+            elif market_strength_score < 0:
+                report['oi_signal'] = "持仓量警示风险"
+                signal_strength -= 20  # 持仓量信号负面，降低信号强度
+            else:
+                report['oi_signal'] = "持仓量中性"
             
             if conditions_met >= 3:  # 至少满足2个条件
                 report['buy_signal'] = 1
@@ -273,6 +392,17 @@ class TripleScreenTradingSystem(bt.Strategy):
                 conditions_met += 1
                 signal_strength += 20
             
+            # 第四重：持仓量确认（新增）
+            if market_strength_score > 0:  # 市场坚挺（对空头是负面）
+                report['oi_signal'] = "持仓量支撑坚挺，空头谨慎"
+                signal_strength -= 20
+            elif market_strength_score < 0:  # 市场疲软（对空头是正面）
+                conditions_met += 1
+                signal_strength += 30
+                report['oi_signal'] = "持仓量支撑做空"
+            else:
+                report['oi_signal'] = "持仓量中性"
+            
             if conditions_met >= 3:
                 report['sell_signal'] = 1
                 report['signal_strength'] = min(signal_strength + 20, 100)
@@ -287,6 +417,18 @@ class TripleScreenTradingSystem(bt.Strategy):
         
         # 添加技术指标状态描述
         report['adx_strength'] = "强趋势" if report['adx'] > 25 else "弱趋势"
+        
+         # 持仓量状态描述
+        if oi_quantile > 0.8:
+            report['oi_status'] = "极端高位"
+        elif oi_quantile > 0.7:
+            report['oi_status'] = "高位"
+        elif oi_quantile < 0.2:
+            report['oi_status'] = "极端低位"
+        elif oi_quantile < 0.3:
+            report['oi_status'] = "低位"
+        else:
+            report['oi_status'] = "中位"
         
         return report
     
@@ -308,6 +450,13 @@ class TripleScreenTradingSystem(bt.Strategy):
         print(f"  ADX: {report['adx']:.1f} ({report['adx_strength']})")
         print(f"  力量指数: {report['force_index']:.0f} ({report['force_status']})")
         print("-"*80)
+        print(f"持仓量分析:")
+        print(f"  成交量: {report['volume']:,.0f} ({report['volume_change_pct']:+.1f}%)")
+        print(f"  持仓量: {report['open_interest']:,.0f} ({report['oi_change_pct']:+.1f}%)")
+        print(f"  持仓分位数: {report['oi_quantile']:.1f}% ({report['oi_status']})")
+        print(f"  市场强度: {report['market_strength']}")
+        print(f"  持仓量信号: {report.get('oi_signal', '无')}")
+        print("-"*80)
         
         if report['buy_signal'] == 1:
             print(f"🎯 买入信号 | 强度: {report['signal_strength']}%")
@@ -315,7 +464,7 @@ class TripleScreenTradingSystem(bt.Strategy):
             print(f"🎯 卖出信号 | 强度: {report['signal_strength']}%")
         else:
             print("⏸️  无交易信号")
-        print("="*80)    
+        print("="*80)   
         
         
     def next(self):

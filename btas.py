@@ -9,6 +9,7 @@ from my_backtrader.tts import TripleScreenTradingSystem
 import concurrent.futures
 from typing import List, Dict, Any
 import warnings
+from pathlib import Path
 warnings.filterwarnings('ignore')
 
 # 自定义数据feed（保持与您原有代码一致）
@@ -204,31 +205,44 @@ class BatchTrendAnalysisSystem:
         
         return df
 
+    def ensure_directory_exists(self, file_path):
+        """
+        确保文件路径中的目录存在，如果不存在则创建（支持多级嵌套目录）
+        """
+        # 使用 pathlib 更可靠地处理路径
+        path = Path(file_path)
+        
+        # 创建所有父目录（如果不存在）
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return True
+
     def save_reports(self, summary_df: pd.DataFrame, detailed_reports: List[Dict]):
         """保存报告到文件"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dir = f"reports/report_{timestamp}"
+        self.ensure_directory_exists(f"{dir}/1.txt")
         
         # 保存汇总报告
         if not summary_df.empty:
-            summary_file = f"trend_analysis_summary_{timestamp}.csv"
+            summary_file = f"{dir}/trend_analysis_summary_{timestamp}.csv"
             summary_df.to_csv(summary_file, index=False, encoding='utf-8-sig')
             self.logger.info(f"汇总报告已保存: {summary_file}")
             
             # 保存详细报告
-            detailed_file = f"trend_analysis_detailed_{timestamp}.csv"
+            detailed_file = f"{dir}/trend_analysis_detailed_{timestamp}.csv"
             detailed_df = pd.DataFrame(detailed_reports)
             detailed_df.to_csv(detailed_file, index=False, encoding='utf-8-sig')
             self.logger.info(f"详细报告已保存: {detailed_file}")
             
             # 生成HTML报告
-            self.generate_html_report(summary_df, detailed_reports, timestamp)
+            self.generate_html_report(summary_df, detailed_reports, timestamp, dir)
         else:
             self.logger.warning("没有数据可保存")
 
-    def generate_html_report(self, summary_df: pd.DataFrame, detailed_reports: List[Dict], timestamp: str):
+    def generate_html_report(self, summary_df: pd.DataFrame, detailed_reports: List[Dict], timestamp: str, dir: str):
         """生成HTML格式的可视化报告"""
         try:
-            html_file = f"trend_analysis_report_{timestamp}.html"
+            html_file = f"{dir}/trend_analysis_report_{timestamp}.html"
             
             # 信号统计
             buy_signals = len(summary_df[summary_df['buy_signal'] == 1])
@@ -281,9 +295,9 @@ class BatchTrendAnalysisSystem:
                             <th>信号</th>
                             <th>信号强度</th>
                             <th>收盘价</th>
-                            <th>RSI</th>
-                            <th>ADX</th>
-                            <th>ATR</th>
+                            <th>市场强度</th>
+                            <th>持仓量状态</th>
+                            <th>ATR相对百分比</th>
                             <th>分析时间</th>
                         </tr>
                     </thead>
@@ -303,9 +317,9 @@ class BatchTrendAnalysisSystem:
                             <td><strong>{signal_text}</strong></td>
                             <td class="{strength_class}">{row['signal_strength']}% ({row['信号强度分类']})</td>
                             <td>{row['close_price']:.2f}</td>
-                            <td>{row['rsi']:.1f}</td>
-                            <td>{row['adx']:.1f}</td>
-                            <td>{row['atr']:.3f}</td>
+                            <td>{row['market_strength']}</td>
+                            <td>{row['oi_status']}</td>
+                            <td>{row['atr_percent']}</td>
                             <td>{row['date']}</td>
                         </tr>
                 """
@@ -334,7 +348,6 @@ class BatchTrendAnalysisSystem:
         if contracts_df.empty:
             self.logger.error("无法获取主力合约列表，分析终止")
             return
-        
         print(contracts_df.head())
         
         # 获取合约数据
