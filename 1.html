@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PVC连续合约K线图</title>
+    <!-- 引入最新版本的 Lightweight Charts -->
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #chart-container {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <h1>PVC连续合约K线图 (2025-09-26至2025-10-31)</h1>
+    <div id="chart-container"></div>
+
+    <script>
+        // 匹配官网格式的数据
+        const chartData = [
+            { time: '2025-09-26', open: 8208, high: 8222, low: 8156, close: 8162 },
+            { time: '2025-09-29', open: 8150, high: 8184, low: 8128, close: 8150 },
+            { time: '2025-09-30', open: 8136, high: 8142, low: 8080, close: 8140 },
+            { time: '2025-10-09', open: 8212, high: 8340, low: 8212, close: 8332 },
+            { time: '2025-10-10', open: 8324, high: 8378, low: 8252, close: 8302 },
+            { time: '2025-10-13', open: 8282, high: 8330, low: 8236, close: 8268 },
+            { time: '2025-10-14', open: 8280, high: 8316, low: 8220, close: 8240 },
+            { time: '2025-10-15', open: 8224, high: 8282, low: 8210, close: 8252 },
+            { time: '2025-10-16', open: 8250, high: 8280, low: 8232, close: 8256 },
+            { time: '2025-10-17', open: 8276, high: 8320, low: 8248, close: 8256 },
+            { time: '2025-10-20', open: 8272, high: 8344, low: 8272, close: 8298 },
+            { time: '2025-10-21', open: 8298, high: 8348, low: 8278, close: 8294 },
+            { time: '2025-10-22', open: 8294, high: 8298, low: 8202, close: 8238 },
+            { time: '2025-10-23', open: 8242, high: 8248, low: 8174, close: 8188 },
+            { time: '2025-10-24', open: 8218, high: 8224, low: 8156, close: 8194 },
+            { time: '2025-10-27', open: 8192, high: 8258, low: 8180, close: 8234 },
+            { time: '2025-10-28', open: 8254, high: 8254, low: 8162, close: 8182 },
+            { time: '2025-10-29', open: 8150, high: 8160, low: 8020, close: 8132 },
+            { time: '2025-10-30', open: 8124, high: 8184, low: 8100, close: 8168 },
+            { time: '2025-10-31', open: 8166, high: 8190, low: 8118, close: 8128 }
+        ];
+
+        // 创建图表
+        const chart = LightweightCharts.createChart(document.getElementById('chart-container'), {
+            width: document.getElementById('chart-container').clientWidth,
+            height: 600,
+            layout: {
+                background: { color: '#ffffff' },
+                textColor: '#333333'
+            },
+            grid: {
+                vertLines: { color: '#e0e0e0' },
+                horzLines: { color: '#e0e0e0' }
+            },
+            timeScale: {
+                visible: true,
+                timeVisible: true
+            }
+        });
+
+        // 添加K线系列（兼容新旧版本的方法名）
+        const candlestickSeries = chart.addCandlestickSeries ? 
+            chart.addCandlestickSeries({  // 新版方法
+                upColor: '#00b578',
+                downColor: '#f53f3f',
+                borderUpColor: '#00b578',
+                borderDownColor: '#f53f3f',
+                wickUpColor: '#00b578',
+                wickDownColor: '#f53f3f'
+            }) : 
+            chart.addCandleSeries({  // 旧版方法（兼容）
+                upColor: '#00b578',
+                downColor: '#f53f3f',
+                borderUpColor: '#00b578',
+                borderDownColor: '#f53f3f',
+                wickUpColor: '#00b578',
+                wickDownColor: '#f53f3f'
+            });
+
+        // 设置数据
+        candlestickSeries.setData(chartData);
+
+        // 自适应显示
+        chart.timeScale().fitContent();
+
+        // 响应窗口大小
+        window.addEventListener('resize', () => {
+            chart.resize(
+                document.getElementById('chart-container').clientWidth,
+                600
+            );
+        });
+    </script>
+</body>
+</html>

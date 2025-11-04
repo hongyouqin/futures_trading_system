@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 import backtrader as bt
 import numpy as np
@@ -41,6 +42,10 @@ class TripleScreenTradingSystem(bt.Strategy):
         dmi = bt.indicators.DirectionalMovementIndex(period = self.p.adx_period)
         self.adx = dmi.lines.adx
         
+        self.mid_ma = bt.indicators.SMA(
+            self.data1.close, period=21, plotname='中期周均线'
+        )
+        
         # 持仓量分析指标
         self.volume = self.data.volume
         self.open_interest = self.data.openinterest
@@ -79,12 +84,14 @@ class TripleScreenTradingSystem(bt.Strategy):
         # 持仓量历史数据存储
         self.oi_history = []
         self.volume_history = []
+        
+        self.logger = logging.getLogger('TripleScreenTradingSystem')
 
     def log(self, txt, dt=None, doprint=False):
         '''正确的日志函数'''
         if self.params.printlog or doprint:
             dt = dt or self.data.datetime.date(0)
-            print(f'{dt.isoformat()}: {txt}')
+            self.logger.info(f'{dt.isoformat()}: {txt}')
     
     def calculate_oi_quantile(self, current_oi, lookback_period=252):
         """
@@ -519,7 +526,7 @@ class TripleScreenTradingSystem(bt.Strategy):
                 if force_exit:
                     self.order = self.close()
                     self.log('多头平仓: 力量指数反转')
-                elif self.trend[0] != 1:
+                elif self.data.close[0] < self.mid_ma[0]:
                     self.order = self.close()
                     self.log('多头平仓，周趋势反转')
                     
@@ -528,10 +535,10 @@ class TripleScreenTradingSystem(bt.Strategy):
                          self.force.lines.force[-1] < 0 and 
                          self.force.lines.force[-2] < 0 and
                          self.rsi[0] < 30) 
-                if force_exit:
+                if self.rsi[0] < 30:
                     self.order = self.close()
                     self.log('空头平仓: 力量指数反转')
-                elif self.trend[0] != -1:
+                elif self.data.close[0] > self.mid_ma[0]:
                     self.order = self.close()
                     self.log('空头平仓，周趋势反转')
         
@@ -650,14 +657,6 @@ class TripleScreenTradingSystem(bt.Strategy):
 
     def notify_trade(self, trade):
         if trade.isclosed:
-            # 直接使用Backtrader系统计算的准确数据
-            self.log(f'🔍 交易结算详情:')
-            self.log(f'  入场价: {self.entry_price:.2f}')
-            self.log(f'  持仓方向: {self.position_direction}')
-            self.log(f'  开仓日期: {trade.dtopen}')
-            self.log(f'  平仓日期: {trade.dtclose}')
-            self.log(f'  持仓周期: {trade.barlen}个bar')
-            
             # 使用系统计算的准确盈亏数据
             system_pnl = trade.pnl
             system_commission = trade.commission

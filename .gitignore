@@ -6,3 +6,5 @@
 settings.json
 *.txt
 .pybrokercache/
+reports/
+*.csv
