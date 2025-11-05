@@ -132,7 +132,7 @@ class DayTradingSignalGenerator(bt.Strategy):
                 
         # 多头信号逻辑
         if trend_direction == 1:  # 上升趋势
-            if force_value < 0:   # 动量确认
+            if force_value < 0 and rsi_value < 65:   # 动量确认
                 if price_above_fast and price_above_slow:  # 价格在双EMA之上
                     signal_info['signal'] = 1
                     signal_info['signal_type'] = 'LONG'
@@ -140,7 +140,7 @@ class DayTradingSignalGenerator(bt.Strategy):
         
         # 空头信号逻辑  
         elif trend_direction == -1:  # 下降趋势
-            if force_value > 0:      # 动量确认
+            if force_value > 0 and rsi_value > 40:      # 动量确认
                 if price_below_fast and price_below_slow:  # 价格在双EMA之下
                     signal_info['signal'] = -1
                     signal_info['signal_type'] = 'SHORT'
@@ -196,7 +196,7 @@ class DayTradingSignalGenerator(bt.Strategy):
             size = self.calculate_position_size(price, stop_loss)
             
             if size > 0:
-                self.buy(size=size)
+                self.buy(size=3)
                 self.stop_loss = stop_loss
                 self.entry_price = price
                 self.entry_time = self.datas[0].datetime.datetime(0)
@@ -207,7 +207,7 @@ class DayTradingSignalGenerator(bt.Strategy):
             size = self.calculate_position_size(price, stop_loss)
             
             if size > 0:
-                self.sell(size=size)
+                self.sell(size=3)
                 self.stop_loss = stop_loss
                 self.entry_price = price
                 self.entry_time = self.datas[0].datetime.datetime(0)
@@ -262,6 +262,68 @@ class DayTradingSignalGenerator(bt.Strategy):
         winning_trades = len([t for t in self.trades if t['pnl'] > 0])
         win_rate = winning_trades / total_trades if total_trades > 0 else 0
         
+        # 计算盈亏比
+        total_profit = 0
+        total_loss = 0
+        profit_trades = []
+        loss_trades = []
+        
+        for trade in self.trades:
+            if trade['pnl'] > 0:
+                total_profit += trade['pnl']
+                profit_trades.append(trade['pnl'])
+            else:
+                total_loss += abs(trade['pnl'])
+                loss_trades.append(trade['pnl'])
+        
+        # 计算平均盈利和平均亏损
+        avg_profit = total_profit / len(profit_trades) if profit_trades else 0
+        avg_loss = total_loss / len(loss_trades) if loss_trades else 0
+        
+        # 计算盈亏比
+        if avg_loss > 0:
+            profit_loss_ratio = avg_profit / avg_loss
+        else:
+            profit_loss_ratio = float('inf') if avg_profit > 0 else 0
+        
+        # 计算总盈亏比（总盈利/总亏损）
+        if total_loss > 0:
+            total_profit_loss_ratio = total_profit / total_loss
+        else:
+            total_profit_loss_ratio = float('inf') if total_profit > 0 else 0
+        
+        self.log(f'总交易次数: {total_trades}')
+        self.log(f'胜率: {win_rate:.2%}')
+        self.log(f'盈利交易: {len(profit_trades)} 次')
+        self.log(f'亏损交易: {len(loss_trades)} 次')
+        self.log(f'总盈利: {total_profit:.2f}')
+        self.log(f'总亏损: {total_loss:.2f}')
+        self.log(f'平均盈利: {avg_profit:.2f}')
+        self.log(f'平均亏损: {avg_loss:.2f}')
+        self.log(f'盈亏比 (平均): {profit_loss_ratio:.2f}')
+        self.log(f'盈亏比 (总): {total_profit_loss_ratio:.2f}')
+        self.log(f'净利润: {total_profit - total_loss:.2f}')
+        
+        # 输出信号统计
+        total_signals = len([s for s in self.signals_log if s['signal'] != 0])
+        long_signals = len([s for s in self.signals_log if s['signal'] == 1])
+        short_signals = len([s for s in self.signals_log if s['signal'] == -1])
+        
+        self.log(f'总信号数: {total_signals} (多头: {long_signals}, 空头: {short_signals})')
+        
+        # 输出最近信号
+        self.log('最近交易信号:')
+        for signal in self.recent_signals[-5:]:  # 显示最近5个信号
+            self.log(f"  时间: {signal['timestamp']}, 类型: {signal['signal_type']}, "
+                    f"价格: {signal['price']:.2f}, RSI: {signal['rsi']:.2f}")
+
+    def stop2(self):
+        '''策略结束'''
+        self.log('策略运行结束')
+        total_trades = len(self.trades)
+        winning_trades = len([t for t in self.trades if t['pnl'] > 0])
+        win_rate = winning_trades / total_trades if total_trades > 0 else 0
+        
         self.log(f'总交易次数: {total_trades}')
         self.log(f'胜率: {win_rate:.2%}')
         
@@ -296,7 +358,7 @@ class FuturesDataFeed(bt.feeds.PandasData):
     )
 
 
-def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_signals_only=True):
+def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_signals_only=True, debug_mode = False):
     """
     运行策略并返回交易信号
     
@@ -330,7 +392,7 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
         data_15min = FuturesDataFeed(dataname=df_15min)
         data_1hour = FuturesDataFeed(dataname=df_1hour)
         
-        print(df_15min)
+        # print(df_15min)
         # 创建回测引擎
         cerebro = bt.Cerebro()
         cerebro.broker.setcash(initial_cash)
@@ -339,11 +401,11 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
         # 添加数据
         cerebro.adddata(data_15min)  # 主数据（15分钟）
         cerebro.adddata(data_1hour)  # 趋势数据（1小时）
-        
+         
         # 添加策略
         cerebro.addstrategy(DayTradingSignalGenerator, 
                           generate_signals_only=generate_signals_only,
-                          debug=True)
+                          debug=debug_mode)
         
         # 运行策略
         print(f'初始资金: {cerebro.broker.getvalue():.2f}')

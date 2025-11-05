@@ -87,7 +87,7 @@ class MovingAverageCrossOver(bt.Indicator):
             self.trend_start_date = self.data.datetime.date(0)
             self.trend_start_price = self.data.close[0]
             
-            print(f"趋势转变! 时间: {self.trend_start_date}, 价格: {self.trend_start_price:.2f}, 类型: {'上涨' if trend_type == 'bullish' else '下跌'}")
+            # print(f"趋势转变! 时间: {self.trend_start_date}, 价格: {self.trend_start_price:.2f}, 类型: {'上涨' if trend_type == 'bullish' else '下跌'}")
         
         # 更新趋势信号
         self.lines.trend[0] = current_signal

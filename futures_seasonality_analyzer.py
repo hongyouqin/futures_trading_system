@@ -931,7 +931,7 @@ def analyze_futures_seasonality_comprehensive():
     """
     综合期货季节性分析
     """
-    analyzer = FuturesSeasonalityAnalyzer(symbol="JM0")
+    analyzer = FuturesSeasonalityAnalyzer(symbol="CF0")
     
     # 获取数据
     if not analyzer.fetch_futures_data(years=20):
