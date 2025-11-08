@@ -126,6 +126,7 @@ class DayTradingSignalGenerator(bt.Strategy):
             'ema_fast': ema_fast,
             'ema_slow': ema_slow,
             'rsi': rsi_value,
+            'atr': round(self.atr[0], 2),
             'signal': 0,
             'signal_type': 'HOLD'
         }

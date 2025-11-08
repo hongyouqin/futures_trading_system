@@ -15,6 +15,8 @@ import os
 SIGNAL_HISTORY_FILE = 'signal_history.json'
 SYMBOLS_CONFIG_FILE = 'symbols_config.xlsx'
 
+symbol_to_name_dict = None
+
 def load_symbols_from_excel():
     """从Excel文件加载品种配置"""
     try:
@@ -28,6 +30,11 @@ def load_symbols_from_excel():
         if 'symbol' not in df.columns:
             print("❌ Excel文件中缺少 'symbol' 列")
             return []
+        
+        # 转换成字典
+        global symbol_to_name_dict
+        df_copy = df.copy()
+        symbol_to_name_dict = df_copy.set_index('symbol')['name'].to_dict()
         
         # 返回symbol列表
         symbols = df['symbol'].dropna().tolist()
@@ -90,15 +97,21 @@ def send_email_notification(symbol, signal_info, receiver_email):
             signal_time = signal_info['timestamp']
         else:
             signal_time = signal_info['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        symbol_name = None
+        if symbol_to_name_dict is not None:
+            symbol_name = symbol_to_name_dict.get(symbol)
             
         body = f"""
 🚀 发现新的交易信号 🚀
 
-品种: {symbol}
+品种: {symbol_name}
+品种代码: {symbol}
 时间: {signal_time}
 信号类型: {signal_info['signal_type']}
 价格: {signal_info['price']:.2f}
 RSI: {signal_info['rsi']:.2f}
+ATR: {signal_info['atr']}
 趋势: {'上涨' if signal_info['trend'] == 1 else '下跌' if signal_info['trend'] == -1 else '震荡'}
 力度指数: {signal_info['force_index']:.2f}
 EMA快线: {signal_info['ema_fast']:.2f}

@@ -1,4 +1,5 @@
 import argparse
+import math
 import akshare as ak
 
 import pandas as pd
@@ -35,44 +36,55 @@ class RSIWithEMA(bt.Indicator):
         
 class RSIWith_KD(bt.Indicator):
     '''
-    自定义指标，包含RSI、RSI_EMA和KD值
-    在同一个区域显示
+    自定义KD指标 - 集成水平线（next方法）
     '''
-    lines = ('k', 'd')
+    lines = ('k', 'd', 'line75', 'line25', 'line50')
     params = (
-        ('kd_period', 14),  # KD计算周期
-        ('k_period', 3),    # K值平滑周期
-        ('d_period', 3),    # D值平滑周期
+        ('period', 14),
+        ('period_dfast', 3),
+        ('period_dslow', 3),
+        ('movav', bt.indicators.MovAv.Exponential),
+    )
+    
+    plotinfo = dict(
+        plotymax=100,
+        plotymin=0
     )
     
     def __init__(self):
-        # 计算KD指标
-        # 计算过去period周期内的最低价和最高价
-        self.lowest_low = bt.indicators.Lowest(self.data.low, period=self.p.kd_period)
-        self.highest_high = bt.indicators.Highest(self.data.high, period=self.p.kd_period)
+        # 计算KD值
+        ll = bt.indicators.Lowest(self.data.low, period=self.p.period)
+        hh = bt.indicators.Highest(self.data.high, period=self.p.period)
         
-        # 计算未成熟随机值(RSV)
-        rsv = (self.data.close - self.lowest_low) / (self.highest_high - self.lowest_low) * 100
+        denom = hh - ll
+        rsv = 100.0 * (self.data.close - ll) / (denom + 1e-10)
+        rsv = bt.Max(0.0, bt.Min(100.0, rsv))
         
-        # 计算K值（RSV的k_period期EMA）
-        self.lines.k = bt.indicators.EMA(rsv, period=self.p.k_period)
+        self.lines.k = self.p.movav(rsv, period=self.p.period_dfast)
+        self.lines.d = self.p.movav(self.lines.k, period=self.p.period_dslow)
         
-        # 计算D值（K值的d_period期EMA）
-        self.lines.d = bt.indicators.EMA(self.lines.k, period=self.p.d_period)
+        # 设置样式
+        # 正确的设置方法 - 使用标准的plotlines属性
+        self.plotlines.line75.linestyle = '--'
+        self.plotlines.line75.color = 'red'
+        self.plotlines.line75.label = 'OB 75'
+        self.plotlines.line75._linewidth = 2.5  # 或者 linewidth
+
+        self.plotlines.line25.linestyle = '--'
+        self.plotlines.line25.color = 'blue'
+        self.plotlines.line25.label = 'OS 25'
+        self.plotlines.line25._linewidth = 2.5  # 或者 linewidth
+
+        self.plotlines.line50.linestyle = ':'  # 虚线
+        self.plotlines.line50.color = 'gray'
+        self.plotlines.line50.label = 'MID 50'
+        self.plotlines.line50._linewidth = 1.5  # 或者 linewidth
         
-        self.plotlines.k.lines = True
-        self.plotlines.k.color = 'green'
-        self.plotlines.k.label = 'K'
-        self.plotlines.k._plotskip = False
-        
-        self.plotlines.d.lines = True
-        self.plotlines.d.color = 'orange'
-        self.plotlines.d.label = 'D'
-        self.plotlines.d._plotskip = False
-        
-        # 设置区域范围（0-100）
-        self.plotinfo.plotymax = 100
-        self.plotinfo.plotymin = 0
+    def next(self):
+        # 确保水平线有正确的值
+        self.lines.line75[0] = 75
+        self.lines.line25[0] = 25
+        self.lines.line50[0] = 50
 
 class TestStrategy(bt.Strategy):
     
@@ -154,4 +166,5 @@ if __name__ == '__main__':
     results = cerebro.run()
     
     # 绘制图表 - 使用更兼容的方式
-    cerebro.plot(style='candle', volume=True, barup='red', bardown='green')
+    cerebro.plot(style='candle', volume=True, barup='red', bardown='green', 
+             title=f'{symbol} {period} 期货分析')

@@ -1,3 +1,4 @@
+import argparse
 import akshare as ak
 import pandas as pd
 import numpy as np
@@ -927,11 +928,11 @@ class FuturesSeasonalityAnalyzer:
         plt.tight_layout()
         plt.show()
     
-def analyze_futures_seasonality_comprehensive():
+def analyze_futures_seasonality_comprehensive(symbol):
     """
     综合期货季节性分析
     """
-    analyzer = FuturesSeasonalityAnalyzer(symbol="CF0")
+    analyzer = FuturesSeasonalityAnalyzer(symbol=symbol)
     
     # 获取数据
     if not analyzer.fetch_futures_data(years=20):
@@ -968,6 +969,18 @@ def analyze_futures_seasonality_comprehensive():
     
     return analyzer, seasonal_stats, returns_stats, monthly_stats, oi_stats
 
+
+def parse_args():
+    '''
+        k线图指标绘制
+    '''
+    parser = argparse.ArgumentParser(  
+        description='日内交易系统')
+    parser.add_argument('--symbol', default="", 
+                        help="期货商品编号，多个品种用逗号分隔")
+    return parser.parse_args()
 # 执行综合分析
 if __name__ == "__main__":
-    analyzer, seasonal_stats, returns_stats, monthly_stats, oi_stats = analyze_futures_seasonality_comprehensive()
+    args = parse_args()
+    if args.symbol:
+        analyzer, seasonal_stats, returns_stats, monthly_stats, oi_stats = analyze_futures_seasonality_comprehensive(symbol= args.symbol)
