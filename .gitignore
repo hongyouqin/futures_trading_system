@@ -10,3 +10,4 @@ reports/
 *.csv
 logs/
 signal_history.json
+.env

@@ -3,6 +3,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+from dotenv import load_dotenv
 
 import pandas as pd
 from my_backtrader.day_trading_signal_generator import run_strategy_with_signals, print_signals_summary
@@ -80,10 +81,10 @@ def send_email_notification(symbol, signal_info, receiver_email):
     """发送邮件通知"""
     try:
         # 邮件配置
-        smtp_server = "smtp.163.com"
-        port = 465  # SSL端口
-        sender_email = "yang.qq123@163.com"
-        password = "GLn5g3d5yNTsmj2Z"  # 邮箱授权码
+        smtp_server = os.getenv("SMTP_SERVER")
+        port = os.getenv("PORT")
+        sender_email = os.getenv("SENDER_EMAIL")
+        password = os.getenv("PWD")
         
         # 创建邮件内容
         message = MIMEMultipart()
@@ -364,6 +365,7 @@ def get_symbols(args):
         exit(1)
 
 if __name__ == "__main__":
+    load_dotenv()
     args = parse_args()
     
     # 获取品种列表
