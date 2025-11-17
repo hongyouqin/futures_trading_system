@@ -13,10 +13,10 @@ class MovingAverageCrossOver(bt.Indicator):
     
     def __init__(self):
                 # 初始化均线指标
-        self.short_ma = bt.indicators.SMA(
+        self.short_ma = bt.indicators.EMA(
             self.data.close, period=self.p.short_ma_period, plotname='短期均线'
         )
-        self.long_ma = bt.indicators.SMA(
+        self.long_ma = bt.indicators.EMA(
             self.data.close, period=self.p.long_ma_period, plotname='长期均线'
         )
         
@@ -34,6 +34,7 @@ class MovingAverageCrossOver(bt.Indicator):
         
         fast_ma = self.short_ma[0]
         slow_ma = self.long_ma[0]
+        # print(f"{self.data.datetime.date(0)} fast_ma={fast_ma} slow_ma = {slow_ma}")
         if fast_ma > slow_ma:
             # 趋势向上
             return 1
@@ -95,4 +96,5 @@ class MovingAverageCrossOver(bt.Indicator):
         
         # 保存当前信号用于下一次比较
         self.last_signal = current_signal
+        # print(f"大周期 date={self.data.datetime.date(0)} signal= {current_signal}")
         

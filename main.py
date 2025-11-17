@@ -51,7 +51,7 @@ if __name__ == '__main__':
         start_date=START_DATE,
         end_date=END_DATE,
         db_path=DB_PATH,
-        display= True
+        display= False
     )
     
     print("===============结果报告===============")

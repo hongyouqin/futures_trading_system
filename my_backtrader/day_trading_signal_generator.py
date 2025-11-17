@@ -378,8 +378,8 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
     """
     try:
         # 这里使用您提供的数据获取代码
-        df_15min = ak.futures_zh_minute_sina(symbol=symbol, period=15)
-        df_1hour = ak.futures_zh_minute_sina(symbol=symbol, period=60)
+        df_15min = ak.futures_zh_minute_sina(symbol=symbol, period=30)
+        df_1hour = ak.futures_zh_minute_sina(symbol=symbol, period=240)
         
         # 数据预处理
         df_15min['datetime'] = pd.to_datetime(df_15min['datetime'])
@@ -388,6 +388,8 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
         df_1hour['datetime'] = pd.to_datetime(df_1hour['datetime'])
         df_1hour = df_1hour.sort_values('datetime')
         
+        print(f"30分钟数据: {df_15min.tail()}")
+        print(f"1小时数据: {df_1hour.tail()}")        
         
         # 创建数据源
         data_15min = FuturesDataFeed(dataname=df_15min)

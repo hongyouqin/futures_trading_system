@@ -166,4 +166,4 @@ if __name__ == '__main__':
     results = cerebro.run()
     
     # 绘制图表 - 使用更兼容的方式
-    cerebro.plot(style='candle', volume=True)
+    cerebro.plot(style='candle', volume=True, barup='red', bardown='green')

@@ -284,6 +284,8 @@ def scheduled_signal_generation(symbols, gso=True, receiver_email=None):
                         if not isinstance(signal_time, str):
                             signal_time = signal_time.strftime('%Y-%m-%d %H:%M:%S')
                         print(f"ℹ️  {symbol} 最新信号时间: {signal_time}")
+                
+                time.sleep(1)
             else:
                 print(f"ℹ️  {symbol} 暂无有效信号")
                 
@@ -321,7 +323,7 @@ def scheduled_day_trading_task(symbols, gso=True, receiver_email=None, interval=
     try:
         while True:
             schedule.run_pending()
-            time.sleep(1)
+            time.sleep(2)
     except KeyboardInterrupt:
         print("\n🛑 监控任务已停止")
         

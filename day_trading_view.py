@@ -101,6 +101,7 @@ class TestStrategy(bt.Strategy):
         self.sma_fast = bt.indicators.EMA(period=self.p.fast)
         self.rsiwith_kd = RSIWith_KD(self.data)
         self.rsi = RSIWithEMA(self.data)
+        self.atr = bt.indicators.ATR(period = 14)
         
         # 动态价值通道指标 - 这会自动显示在主图上
         self.value_channel = DynamicValueChannel(
@@ -113,7 +114,9 @@ class TestStrategy(bt.Strategy):
     def next(self):
         # 策略逻辑...
         # 价值通道会自动更新，不需要在这里手动更新
-        pass
+        current_up_channel = self.value_channel.lines.up_channel[0]
+        current_down_channel = self.value_channel.lines.down_channel[0]
+        print(f"时间={self.data.datetime.date(0).strftime('%Y-%m-%d %H:%M'),} atr={self.atr[0]}，价值上通道={current_up_channel}, 价值下通道={current_down_channel}")
 
 
 def parse_args():
@@ -146,7 +149,7 @@ if __name__ == '__main__':
     
     symbol = args.symbol
     period = args.period
-    data_df = ak.futures_zh_minute_sina(symbol=symbol, period=15)
+    data_df = ak.futures_zh_minute_sina(symbol=symbol, period=30)
     print(data_df.head())
     cerebro = bt.Cerebro()
     # 添加策略
