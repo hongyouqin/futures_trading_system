@@ -127,7 +127,7 @@ def parse_args():
         description='期货指标分析')
     parser.add_argument('--symbol', default="", required= True, 
                         help="期货商品编号")
-    parser.add_argument('--period', default="15min", 
+    parser.add_argument('--period', default="30min", 
                         help="周期: daily, weekly")
     return parser.parse_args()
 
@@ -149,7 +149,7 @@ if __name__ == '__main__':
     
     symbol = args.symbol
     period = args.period
-    data_df = ak.futures_zh_minute_sina(symbol=symbol, period=30)
+    data_df = ak.futures_zh_minute_sina(symbol=symbol, period=period)
     print(data_df.head())
     cerebro = bt.Cerebro()
     # 添加策略

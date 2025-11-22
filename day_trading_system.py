@@ -1,4 +1,5 @@
 import argparse
+import random
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -14,18 +15,20 @@ import os
 
 # 信号记录文件路径
 SIGNAL_HISTORY_FILE = 'signal_history.json'
-SYMBOLS_CONFIG_FILE = 'symbols_config.xlsx'
+# SYMBOLS_CONFIG_FILE = 'symbols_config.xlsx'
+#夜盘交易商品
+# SYMBOLS_CONFIG_FILE = 'overnight_symbols_config.xlsx'
 
 symbol_to_name_dict = None
 
-def load_symbols_from_excel():
+def load_symbols_from_excel(config_file):
     """从Excel文件加载品种配置"""
     try:
-        if not os.path.exists(SYMBOLS_CONFIG_FILE):
-            print(f"❌ 品种配置文件 {SYMBOLS_CONFIG_FILE} 不存在")
+        if not os.path.exists(config_file):
+            print(f"❌ 品种配置文件 {config_file} 不存在")
             return []
         
-        df = pd.read_excel(SYMBOLS_CONFIG_FILE)
+        df = pd.read_excel(config_file)
         
         # 检查必要的列是否存在
         if 'symbol' not in df.columns:
@@ -54,6 +57,8 @@ def parse_args():
         description='日内交易系统')
     parser.add_argument('--symbol', default="", 
                         help="期货商品编号，多个品种用逗号分隔")
+    parser.add_argument('--symbol_config_file', default="symbols_config.xlsx", 
+                        help="期货商品配置文件，默认是全部，夜盘建议用overnight_symbols_config.xlsx")
     parser.add_argument('--file', action='store_true',
                         help="从Excel文件读取品种列表")
     parser.add_argument('--gso', choices=['true', 'false', 'True', 'False', '1', '0'], 
@@ -61,7 +66,7 @@ def parse_args():
     parser.add_argument('--exec', choices=['test', 'schedule'], required=True, 
                         help="执行模式：test(单个商品测试) 或 schedule(定时执行)")
     parser.add_argument('--email', help="接收通知的邮箱地址")
-    parser.add_argument('--interval', type=int, default=5, 
+    parser.add_argument('--interval', type=int, default=10, 
                         help="定时执行间隔(分钟)")
     return parser.parse_args()
 
@@ -286,7 +291,7 @@ def scheduled_signal_generation(symbols, gso=True, receiver_email=None):
                             signal_time = signal_time.strftime('%Y-%m-%d %H:%M:%S')
                         print(f"ℹ️  {symbol} 最新信号时间: {signal_time}")
                 
-                time.sleep(1)
+                time.sleep(random.uniform(1, 5))
             else:
                 print(f"ℹ️  {symbol} 暂无有效信号")
                 
@@ -307,7 +312,7 @@ def scheduled_signal_generation(symbols, gso=True, receiver_email=None):
     else:
         print(f"🎉 本次共发现 {all_new_signals} 个新信号")
 
-def scheduled_day_trading_task(symbols, gso=True, receiver_email=None, interval=5):
+def scheduled_day_trading_task(symbols, gso=True, receiver_email=None, interval=10):
     """定时交易任务"""
     print(f"🚀 启动定时监控任务")
     print(f"📈 监控品种: {', '.join(symbols)}")
@@ -324,14 +329,17 @@ def scheduled_day_trading_task(symbols, gso=True, receiver_email=None, interval=
     try:
         while True:
             schedule.run_pending()
-            time.sleep(2)
+            time.sleep(1)
     except KeyboardInterrupt:
         print("\n🛑 监控任务已停止")
         
         
 '''
 # 从文件监控多个品种
-# python day_trading_system.py --file --exec schedule --email yang.qq123@163.com
+# 白盘
+python day_trading_system.py --file --exec schedule --email yang.qq123@163.com --symbol_config_file symbols_config.xlsx
+# 夜盘
+python day_trading_system.py --file --exec schedule --email yang.qq123@163.com --symbol_config_file overnight_symbols_config.xlsx
 
 # 监控单个品种，开启邮件通知
 python day_trading_system.py --symbol JM2601 --exec schedule --email your_email@qq.com
@@ -350,7 +358,8 @@ def get_symbols(args):
     """根据参数获取品种列表"""
     if args.file:
         # 从Excel文件读取
-        symbols = load_symbols_from_excel()
+        config_file = args.symbol_config_file
+        symbols = load_symbols_from_excel(config_file)
         if not symbols:
             print("❌ 无法从文件读取品种列表，请检查配置文件")
             exit(1)
