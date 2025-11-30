@@ -1,6 +1,8 @@
 import logging
 from logging.handlers import TimedRotatingFileHandler
 import os
+import random
+import time
 import backtrader as bt
 import pandas as pd
 import akshare as ak
@@ -31,7 +33,7 @@ class BatchTrendAnalysisSystem:
     批量期货商品趋势分析系统
     """
     
-    def __init__(self, start_date='20230101', end_date=None, max_workers=5):
+    def __init__(self, start_date='20230101', end_date=None, max_workers=2):
         self.start_date = start_date
         self.end_date = end_date or datetime.now().strftime('%Y%m%d')
         self.max_workers = max_workers
@@ -146,8 +148,8 @@ class BatchTrendAnalysisSystem:
             cerebro.broker.setcommission(commission=0.0005)
             
             # 添加数据
-            print(contract_data['daily_data'].tail())
-            print(contract_data['weekly_data'].tail())
+            # print(contract_data['daily_data'].tail())
+            # print(contract_data['weekly_data'].tail())
             daily_data = FuturesDataFeed(dataname=contract_data['daily_data'])
             weekly_data = FuturesDataFeed(dataname=contract_data['weekly_data'])
             
@@ -348,7 +350,7 @@ class BatchTrendAnalysisSystem:
         if contracts_df.empty:
             self.logger.error("无法获取主力合约列表，分析终止")
             return
-        print(contracts_df.head())
+        # print(contracts_df.head())
         
         # 获取合约数据
         self.logger.info("📥 正在获取各合约历史数据...")
@@ -363,6 +365,7 @@ class BatchTrendAnalysisSystem:
                 name = row['name']
                 future = executor.submit(self.get_contract_data, symbol, name)
                 future_to_contract[future] = (symbol, name)
+                time.sleep(random.uniform(1, 5))
             
             for future in concurrent.futures.as_completed(future_to_contract):
                 symbol, name = future_to_contract[future]

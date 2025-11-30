@@ -122,6 +122,11 @@ ATR: {signal_info['atr']}
 力度指数: {signal_info['force_index']:.2f}
 EMA快线: {signal_info['ema_fast']:.2f}
 EMA慢线: {signal_info['ema_slow']:.2f}
+市场强度: {signal_info['market_strength']}
+市场强度分数：{signal_info['market_strength_score']}
+价值上通道: {signal_info['value_up_channel']}
+价值下通道：{signal_info['value_down_channel']}
+
 
 📈 交易建议:
 {'考虑做多' if signal_info['signal_type'] == 'LONG' else '考虑做空' if signal_info['signal_type'] == 'SHORT' else '保持观望'}
@@ -213,6 +218,7 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
             
             if not is_first and receiver_email:
                 send_email_notification(symbol, signal, receiver_email)
+                send_email_notification(symbol, signal, "717480622@qq.com")
             
             # 记录到历史
             history[symbol].append(signal_id)
@@ -351,7 +357,7 @@ python day_trading_system.py --symbol JM2601,SA0,MA0 --exec schedule --email you
 python day_trading_system.py --symbol JM2601 --exec schedule --email your_email@qq.com --interval 10
 
 # 单次测试多个品种
-python day_trading_system.py --symbol JM2601,SA0 --exec test --email your_email@qq.com
+python day_trading_system.py --symbol JM2601 --exec test --email your_email@qq.com
 '''
 
 def get_symbols(args):

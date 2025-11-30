@@ -1,7 +1,10 @@
 import backtrader as bt
 import akshare as ak
+import numpy as np
 from custom_indicators.mac_indicator import MovingAverageCrossOver
 from custom_indicators.force_indicator import ForceIndex
+from custom_indicators.dynamic_value_channel import DynamicValueChannel
+
 import pandas as pd
 import warnings
 warnings.filterwarnings('ignore')
@@ -26,6 +29,10 @@ class DayTradingSignalGenerator(bt.Strategy):
         ('debug', True),            # 调试模式
         ('generate_signals_only', False),  # 仅生成信号，不执行交易
         ('rsi_exit_threshold', 70), # RSI离场阈值
+        ('oi_lookback', 150*5),         # 持仓量分位数计算周期（5年）
+        ('oi_threshold', 0.7),        # 持仓量高位阈值
+        ('channel_coeff', 0.152579),
+        ('channel_window', 60),
     )
     
     def __init__(self):
@@ -42,6 +49,21 @@ class DayTradingSignalGenerator(bt.Strategy):
         
         # 波动性指标
         self.atr = bt.indicators.ATR(self.data, period=self.params.atr_period)
+        
+        # 动态价值通道指标 - 这会自动显示在主图上
+        self.value_channel = DynamicValueChannel(
+            self.data,
+            slow_period=self.p.long_ma_period,
+            channel_window=self.p.channel_window,
+            initial_coeff=self.p.channel_coeff
+        )
+        
+        # 持仓量分析指标
+        self.volume = self.data.volume
+        self.open_interest = self.data.openinterest
+        # 持仓量历史数据存储
+        self.oi_history = []
+        self.volume_history = []
         
         # 信号状态跟踪
         self.signal = None
@@ -95,8 +117,85 @@ class DayTradingSignalGenerator(bt.Strategy):
             size = risk_amount / price_risk
             return int(size)
         return 0
+    
+    def get_volume_change(self):
+        """计算成交量变化率"""
+        if len(self.volume) < 2:
+            return 0
+        return (self.volume[0] - self.volume[-1]) / self.volume[-1] if self.volume[-1] != 0 else 0
+
+    def get_oi_change(self):
+        """计算持仓量变化率"""
+        if len(self.open_interest) < 2:
+            return 0
+        return (self.open_interest[0] - self.open_interest[-1]) / self.open_interest[-1] if self.open_interest[-1] != 0 else 0
+
+    def get_price_change(self):
+        """计算价格变化率"""
+        if len(self.data.close) < 2:
+            return 0
+        return (self.data.close[0] - self.data.close[-1]) / self.data.close[-1] if self.data.close[-1] != 0 else 0
+
+    def calculate_oi_quantile(self, current_oi, lookback_period=150):
+        """
+        计算当前持仓量在历史中的分位数位置
+        """
+        if len(self.oi_history) < lookback_period:
+            # 数据不足时返回中性值
+            return 0.5
+        
+        # 计算当前持仓量在历史中的分位数
+        oi_array = np.array(self.oi_history[-lookback_period:])
+        quantile = np.sum(oi_array <= current_oi) / len(oi_array)
+        return quantile
+    
+    def analyze_market_strength(self, price_change, volume_change, oi_change, oi_quantile):
+        """
+        分析市场强度基于价格、成交量、持仓量关系
+        返回: 市场强度描述和分数 (1: 坚挺, -1: 疲软, 0: 中性)
+        """
+        # 规则1: 价格上涨 + 成交量增加 + 持仓兴趣上升 = 坚挺
+        if price_change > 0 and volume_change > 0 and oi_change > 0:
+            return "市场坚挺: 价涨量增仓升", 1
+        
+        # 规则2: 价格上涨 + 成交量减少 + 持仓兴趣下降 = 疲软
+        elif price_change > 0 and volume_change < 0 and oi_change < 0:
+            return "市场疲软: 价涨量减仓降", -1
+        
+        # 规则3: 价格下跌 + 成交量减少 + 持仓兴趣下降 = 坚挺
+        elif price_change < 0 and volume_change < 0 and oi_change < 0:
+            return "市场坚挺: 价跌量减仓降", 1
+        
+        # 规则4: 价格下跌 + 成交量增加 + 持仓兴趣上升 = 疲软
+        elif price_change < 0 and volume_change > 0 and oi_change > 0:
+            return "市场疲软: 价跌量增仓升", -1
+        
+        # 考虑持仓量分位数
+        elif oi_quantile > self.p.oi_threshold:
+            return f"持仓量极端高位({oi_quantile:.1%})，谨慎操作", -1
+        elif oi_quantile < 0.3:
+            return f"持仓量极端低位({oi_quantile:.1%})，可能存在机会", 1
+        else:
+            return "市场中性: 信号不明确", 0
 
     def generate_signal(self):
+        
+        # 收集历史数据
+        if len(self.open_interest) > 0:
+            self.oi_history.append(float(self.open_interest[0]))
+        if len(self.volume) > 0:
+            self.volume_history.append(float(self.volume[0]))
+        
+        # 限制历史数据长度
+        max_history = self.p.oi_lookback * 2
+        if len(self.oi_history) > max_history:
+            self.oi_history = self.oi_history[-max_history:]
+        if len(self.volume_history) > max_history:
+            self.volume_history = self.volume_history[-max_history:]
+        
+        # 更新价值通道
+        current_up_channel = self.value_channel.lines.up_channel[0]
+        current_down_channel = self.value_channel.lines.down_channel[0]
         
         '''生成交易信号'''
         current_price = self.data.close[0]
@@ -118,6 +217,21 @@ class DayTradingSignalGenerator(bt.Strategy):
         price_below_fast = current_price < ema_fast
         price_below_slow = current_price < ema_slow
         
+        
+        # 计算持仓量分位数
+        current_oi = float(self.open_interest[0]) if len(self.open_interest) > 0 else 0
+        oi_quantile = self.calculate_oi_quantile(current_oi, self.p.oi_lookback)
+        
+        # 计算变化率
+        price_change = self.get_price_change()
+        volume_change = self.get_volume_change()
+        oi_change = self.get_oi_change()
+        # 分析市场强度
+        market_strength_text, market_strength_score = self.analyze_market_strength(
+            price_change, volume_change, oi_change, oi_quantile
+        )
+        
+        
         signal_info = {
             'timestamp': current_time,
             'trend': trend_direction,
@@ -128,7 +242,11 @@ class DayTradingSignalGenerator(bt.Strategy):
             'rsi': rsi_value,
             'atr': round(self.atr[0], 2),
             'signal': 0,
-            'signal_type': 'HOLD'
+            'signal_type': 'HOLD',
+            'market_strength': market_strength_text,
+            'market_strength_score': market_strength_score,
+            'value_up_channel' : round(current_up_channel, 2),
+            'value_down_channel' : round(current_down_channel, 2),
         }
                 
         # 多头信号逻辑
@@ -378,8 +496,8 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
     """
     try:
         # 这里使用您提供的数据获取代码
-        df_15min = ak.futures_zh_minute_sina(symbol=symbol, period=30)
-        df_1hour = ak.futures_zh_minute_sina(symbol=symbol, period=240)
+        df_15min = ak.futures_zh_minute_sina(symbol=symbol, period=15)
+        df_1hour = ak.futures_zh_minute_sina(symbol=symbol, period=60)
         
         # 数据预处理
         df_15min['datetime'] = pd.to_datetime(df_15min['datetime'])
@@ -455,6 +573,11 @@ def print_signals_summary(result):
         print(f"   RSI: {signal['rsi']:.2f}")
         print(f"   趋势: {'上涨' if signal['trend'] == 1 else '下跌' if signal['trend'] == -1 else '震荡'}")
         print(f"   力度指数: {signal['force_index']:.2f}")
+        print(f"   市場强度: {signal['market_strength']}")
+        print(f"   市場分数: {signal['market_strength_score']}")
+        print(f"   价值上通道: {signal['value_up_channel']}")
+        print(f"   价值下通道: {signal['value_down_channel']}")
+        
         print("-" * 30)
 
 

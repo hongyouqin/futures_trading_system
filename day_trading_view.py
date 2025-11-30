@@ -127,7 +127,7 @@ def parse_args():
         description='期货指标分析')
     parser.add_argument('--symbol', default="", required= True, 
                         help="期货商品编号")
-    parser.add_argument('--period', default="30min", 
+    parser.add_argument('--period', default="15min", 
                         help="周期: daily, weekly")
     return parser.parse_args()
 
