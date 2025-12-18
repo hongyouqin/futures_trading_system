@@ -66,7 +66,7 @@ def parse_args():
     parser.add_argument('--exec', choices=['test', 'schedule'], required=True, 
                         help="执行模式：test(单个商品测试) 或 schedule(定时执行)")
     parser.add_argument('--email', help="接收通知的邮箱地址")
-    parser.add_argument('--interval', type=int, default=10, 
+    parser.add_argument('--interval', type=int, default=5, 
                         help="定时执行间隔(分钟)")
     return parser.parse_args()
 
@@ -126,6 +126,9 @@ EMA慢线: {signal_info['ema_slow']:.2f}
 市场强度分数：{signal_info['market_strength_score']}
 价值上通道: {signal_info['value_up_channel']}
 价值下通道：{signal_info['value_down_channel']}
+价值通道大小：{signal_info['value_size']}
+做多入场价：{signal_info['suggested_buy_long']}
+做空入场价：{signal_info['suggested_sell_short']}
 
 
 📈 交易建议:
@@ -148,6 +151,32 @@ EMA慢线: {signal_info['ema_slow']:.2f}
     except Exception as e:
         print(f"❌ 邮件发送失败: {e}")
         return False
+
+def send_symbol_signal_to_hewei_custom(symbol: str, signal: str):
+    '''
+        这个是何威客户期货所要的品种
+    '''
+    is_send = False
+    if symbol.startswith("JM"):
+        is_send = True
+    elif symbol.startswith("AU"):
+        is_send = True
+    elif symbol.startswith("AG"):
+        is_send = True
+    elif symbol.startswith("PT"):
+        is_send = True
+    elif symbol.startswith("PD"):
+        is_send = True
+    elif symbol.startswith("SN"):
+        is_send = True
+    elif symbol.startswith("PS"):
+        is_send = True
+    else:
+        pass
+    
+    if is_send:
+        send_email_notification(symbol, signal, "vegard@qq.com")
+    
 
 def check_new_signals(symbol, current_signals, receiver_email=None):
     """检查新信号并发送通知"""
@@ -219,6 +248,7 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
             if not is_first and receiver_email:
                 send_email_notification(symbol, signal, receiver_email)
                 send_email_notification(symbol, signal, "717480622@qq.com")
+                send_symbol_signal_to_hewei_custom(symbol=symbol, signal=signal)
             
             # 记录到历史
             history[symbol].append(signal_id)
@@ -318,7 +348,7 @@ def scheduled_signal_generation(symbols, gso=True, receiver_email=None):
     else:
         print(f"🎉 本次共发现 {all_new_signals} 个新信号")
 
-def scheduled_day_trading_task(symbols, gso=True, receiver_email=None, interval=10):
+def scheduled_day_trading_task(symbols, gso=True, receiver_email=None, interval=5):
     """定时交易任务"""
     print(f"🚀 启动定时监控任务")
     print(f"📈 监控品种: {', '.join(symbols)}")
@@ -357,7 +387,7 @@ python day_trading_system.py --symbol JM2601,SA0,MA0 --exec schedule --email you
 python day_trading_system.py --symbol JM2601 --exec schedule --email your_email@qq.com --interval 10
 
 # 单次测试多个品种
-python day_trading_system.py --symbol JM2601 --exec test --email your_email@qq.com
+python day_trading_system.py --symbol JM2605 --exec test --email your_email@qq.com
 '''
 
 def get_symbols(args):

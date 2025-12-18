@@ -75,6 +75,8 @@ def parse_args():
                         help="期货商品编号")
     parser.add_argument('--period', default="daily", 
                         help="周期: daily, weekly")
+    parser.add_argument('--update', default="0", 
+                        help="周期: daily, weekly")
     return parser.parse_args()
 
 def futures_main_weekly_sina(
@@ -123,8 +125,9 @@ if __name__ == '__main__':
     end_date='2025-12-31'
     
     fdm = FuturesDataManager()
+    # fdm.update_all_main_contracts_data()
     daily_df = fdm.query_data(symbol=symbol, start_date= tart_date, end_date= end_date)
-    print(daily_df)
+    print(daily_df.head())
     data_df = daily_df
     if period == 'weekly': 
         print("周线===============")

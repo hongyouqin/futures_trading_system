@@ -116,8 +116,7 @@ class TestStrategy(bt.Strategy):
         # 价值通道会自动更新，不需要在这里手动更新
         current_up_channel = self.value_channel.lines.up_channel[0]
         current_down_channel = self.value_channel.lines.down_channel[0]
-        print(f"时间={self.data.datetime.date(0).strftime('%Y-%m-%d %H:%M'),} atr={self.atr[0]}，价值上通道={current_up_channel}, 价值下通道={current_down_channel}")
-
+        print(f"时间={self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M')} atr={self.atr[0]}，价值上通道={current_up_channel}, 价值下通道={current_down_channel}")
 
 def parse_args():
     '''
@@ -128,7 +127,7 @@ def parse_args():
     parser.add_argument('--symbol', default="", required= True, 
                         help="期货商品编号")
     parser.add_argument('--period', default="15min", 
-                        help="周期: daily, weekly")
+                        help="周期: 5min, 15min, 30min")
     return parser.parse_args()
 
 class FuturesDataFeed(bt.feeds.PandasData):

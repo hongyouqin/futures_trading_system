@@ -33,6 +33,8 @@ class DayTradingSignalGenerator(bt.Strategy):
         ('oi_threshold', 0.7),        # 持仓量高位阈值
         ('channel_coeff', 0.152579),
         ('channel_window', 60),
+        ('penetration_lookback_bars', 60),  # 穿透计算回溯周期（60根K线）
+        ('penetration_buffer', 0.8),  # 穿透缓冲区（0.8表示使用80%的平均穿透深度）
     )
     
     def __init__(self):
@@ -58,6 +60,11 @@ class DayTradingSignalGenerator(bt.Strategy):
             initial_coeff=self.p.channel_coeff
         )
         
+        # 穿透计算相关变量
+        self.penetration_up_depth = 0.0  # 向上穿透值
+        self.penetration_down_depth = 0.0  # 向下穿透值
+        self.penetration_history = []  # 历史穿透记录
+                
         # 持仓量分析指标
         self.volume = self.data.volume
         self.open_interest = self.data.openinterest
@@ -82,6 +89,105 @@ class DayTradingSignalGenerator(bt.Strategy):
         if self.params.debug:
             dt = dt or self.datas[0].datetime.datetime(0)
             print(f'{dt.isoformat()} {txt}')
+    
+    def calculate_penetration_values(self):
+        """
+        计算向上和向下穿透值
+        返回: (向上穿透值, 向下穿透值)
+        """
+        current_close = self.data.close[0]
+        current_fast_ema = self.ema_fast[0]
+        previous_close = self.data.close[-1]
+        previous_fast_ema = self.ema_fast[-1]
+        
+        # 检查当前是否发生穿透
+        up_penetration = (previous_close <= previous_fast_ema) and (current_close > current_fast_ema)
+        down_penetration = (previous_close >= previous_fast_ema) and (current_close < current_fast_ema)
+        
+        # 如果发生穿透，记录到历史
+        if up_penetration or down_penetration:
+            penetration_depth = abs(current_close - current_fast_ema)
+            
+            penetration_record = {
+                'datetime': self.data.datetime.datetime(0),
+                'type': 'up' if up_penetration else 'down',
+                'depth': penetration_depth,
+                'close': current_close,
+                'ema_fast': current_fast_ema,
+                'distance': current_close - current_fast_ema  # 正数表示在EMA之上，负数表示在EMA之下
+            }
+            
+            # 添加到历史记录
+            self.penetration_history.append(penetration_record)
+            
+            # 保持历史记录长度
+            if len(self.penetration_history) > self.params.penetration_lookback_bars:
+                self.penetration_history.pop(0)
+            
+            self.log(f"检测到{'向上' if up_penetration else '向下'}穿透: "
+                    f"深度={penetration_depth:.2f}, "
+                    f"价格={current_close:.2f}, "
+                    f"EMA={current_fast_ema:.2f}")
+        
+        # 计算平均穿透深度
+        up_penetrations = [p['depth'] for p in self.penetration_history if p['type'] == 'up']
+        down_penetrations = [p['depth'] for p in self.penetration_history if p['type'] == 'down']
+        
+        # 计算平均深度（如果有历史数据）
+        avg_up_depth = np.mean(up_penetrations) if up_penetrations else 0.0
+        avg_down_depth = np.mean(down_penetrations) if down_penetrations else 0.0
+        
+        # 如果没有历史数据，使用ATR作为估计
+        if avg_up_depth == 0.0 or avg_down_depth == 0.0:
+            current_atr = self.atr[0] if len(self.atr) > 0 else 0.0
+            if avg_up_depth == 0.0:
+                avg_up_depth = current_atr * 0.5  # ATR的一半作为向上穿透估计
+            if avg_down_depth == 0.0:
+                avg_down_depth = current_atr * 0.5  # ATR的一半作为向下穿透估计
+        
+        # 应用缓冲区（保守估计）
+        self.penetration_up_depth = avg_up_depth * self.params.penetration_buffer
+        self.penetration_down_depth = avg_down_depth * self.params.penetration_buffer
+        
+        return self.penetration_up_depth, self.penetration_down_depth
+    
+    def get_suggested_prices(self):
+        """
+        获取建议的交易价格
+        
+        返回: (做多建议买入价, 做空建议卖出价)
+        """
+        current_close = self.data.close[0]
+        current_fast_ema = self.ema_fast[0]
+        current_slow_ema = self.ema_slow[0]
+        
+        # 计算当前EMA趋势
+        ema_trend = 'up' if current_fast_ema > current_slow_ema else 'down'
+        
+        # 计算穿透值
+        up_depth, down_depth = self.calculate_penetration_values()
+        
+        # 建议做多买入价：当前快速EMA - 向下穿透值（在EMA下方买入）
+        suggested_buy_long = current_fast_ema - down_depth
+        
+        # 建议做空卖出价：当前快速EMA + 向上穿透值（在EMA上方卖出）
+        suggested_sell_short = current_fast_ema + up_depth
+        
+        # 如果当前价格已经低于建议买入价，使用当前价格
+        if current_close < suggested_buy_long:
+            suggested_buy_long = current_close - current_close * 0.001  # 比当前价低0.1%
+        
+        # 如果当前价格已经高于建议卖出价，使用当前价格
+        if current_close > suggested_sell_short:
+            suggested_sell_short = current_close + current_close * 0.001  # 比当前价高0.1%
+        
+        # 确保价格合理
+        # suggested_buy_long = max(suggested_buy_long, current_close * 0.95)  # 不低于当前价的95%
+        # suggested_sell_short = min(suggested_sell_short, current_close * 1.05)  # 不高于当前价的105%
+        
+        return suggested_buy_long, suggested_sell_short, ema_trend
+    
+    
 
     def notify_order(self, order):
         '''订单状态通知'''
@@ -177,6 +283,8 @@ class DayTradingSignalGenerator(bt.Strategy):
             return f"持仓量极端低位({oi_quantile:.1%})，可能存在机会", 1
         else:
             return "市场中性: 信号不明确", 0
+        
+    
 
     def generate_signal(self):
         
@@ -211,6 +319,12 @@ class DayTradingSignalGenerator(bt.Strategy):
         ema_fast = self.ema_fast[0]
         ema_slow = self.ema_slow[0]
         rsi_value = self.rsi[0]
+        
+          # 获取建议价格
+        suggested_buy_long, suggested_sell_short, _ = self.get_suggested_prices()
+        # 计算当前价格与建议价格的差距
+        distance_to_buy = current_price - suggested_buy_long
+        distance_to_sell = suggested_sell_short - current_price
         
         price_above_fast = current_price > ema_fast
         price_above_slow = current_price > ema_slow
@@ -247,11 +361,19 @@ class DayTradingSignalGenerator(bt.Strategy):
             'market_strength_score': market_strength_score,
             'value_up_channel' : round(current_up_channel, 2),
             'value_down_channel' : round(current_down_channel, 2),
+            'value_size' : round(current_up_channel - current_down_channel),
+            # 穿透值相关
+            'penetration_up_depth': round(self.penetration_up_depth, 2),
+            'penetration_down_depth': round(self.penetration_down_depth, 2),
+            'suggested_buy_long': round(suggested_buy_long, 2),
+            'suggested_sell_short': round(suggested_sell_short, 2),
+            'distance_to_buy': round(distance_to_buy, 2),
+            'distance_to_sell': round(distance_to_sell, 2),
         }
                 
         # 多头信号逻辑
         if trend_direction == 1:  # 上升趋势
-            if force_value < 0 and rsi_value < 65:   # 动量确认
+            if force_value < 0 and rsi_value < 75:   # 动量确认
                 if price_above_fast and price_above_slow:  # 价格在双EMA之上
                     signal_info['signal'] = 1
                     signal_info['signal_type'] = 'LONG'
@@ -577,6 +699,10 @@ def print_signals_summary(result):
         print(f"   市場分数: {signal['market_strength_score']}")
         print(f"   价值上通道: {signal['value_up_channel']}")
         print(f"   价值下通道: {signal['value_down_channel']}")
+        print(f"   建议做多买入价: {signal['suggested_buy_long']}")
+        print(f"   建议做空卖出价: {signal['suggested_sell_short']}")
+        print(f"   离做多买入价距离: {signal['distance_to_buy']}")
+        print(f"   离做空卖出价距离: {signal['distance_to_sell']}")
         
         print("-" * 30)
 
