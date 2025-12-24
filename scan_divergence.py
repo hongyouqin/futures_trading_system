@@ -9,6 +9,8 @@ import os
 from datetime import datetime, timedelta
 import warnings
 
+from tool import send_markdown_to_dingding
+
 warnings.filterwarnings('ignore')
 
 # ==================== 核心计算函数 ====================
@@ -366,7 +368,7 @@ class FuturesDivergenceReporter:
                     strength_display = f"{strength:.1f} {strength_icon}"
                     
                     report_lines.append(
-                        f"| {signal['signal_time'].strftime('%H:%M')} | "
+                        f"| {signal['signal_time'].strftime('%m-%d %H:%M')} | "
                         f"{signal['current_price']} | {strength_display} |"
                     )
         
@@ -449,7 +451,7 @@ class FuturesDivergenceReporter:
         
         # 生成报告文件名
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        report_file_txt = f"divergence_reports/latest_signals_{timestamp}.txt"
+        # report_file_txt = f"divergence_reports/latest_signals_{timestamp}.txt"
         report_file_md = f"divergence_reports/latest_signals_{timestamp}.md"
         
         # 生成报告内容
@@ -458,20 +460,23 @@ class FuturesDivergenceReporter:
         # 保存为Markdown文件
         with open(report_file_md, 'w', encoding='utf-8') as f:
             f.write(report_content)
+            
+        #发送到钉钉群里
+        send_markdown_to_dingding(msg= report_content)
         
         # 同时保存为纯文本文件（兼容性）
-        with open(report_file_txt, 'w', encoding='utf-8') as f:
-            # 转换为纯文本格式（移除Markdown标记）
-            text_content = report_content
-            text_content = text_content.replace('# ', '')
-            text_content = text_content.replace('## ', '')
-            text_content = text_content.replace('**', '')
-            text_content = text_content.replace('| :--- | :--- | :--- | :--- | :--- |', '')
-            text_content = text_content.replace('|', ' | ')
-            f.write(text_content)
+        # with open(report_file_txt, 'w', encoding='utf-8') as f:
+        #     # 转换为纯文本格式（移除Markdown标记）
+        #     text_content = report_content
+        #     text_content = text_content.replace('# ', '')
+        #     text_content = text_content.replace('## ', '')
+        #     text_content = text_content.replace('**', '')
+        #     text_content = text_content.replace('| :--- | :--- | :--- | :--- | :--- |', '')
+        #     text_content = text_content.replace('|', ' | ')
+        #     f.write(text_content)
         
         print(f"📄 Markdown报告已生成: {report_file_md}")
-        print(f"📄 纯文本报告已生成: {report_file_txt}")
+        # print(f"📄 纯文本报告已生成: {report_file_txt}")
         
         # 在控制台输出简化报告
         print("\n" + "="*80)
