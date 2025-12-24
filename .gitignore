@@ -10,3 +10,4 @@ reports/
 logs/
 signal_history.json
 .env
+divergence_reports/
