@@ -13,6 +13,8 @@ import time
 import json
 import os
 
+from tool import send_to_dingding
+
 # 信号记录文件路径
 SIGNAL_HISTORY_FILE = 'signal_history.json'
 # SYMBOLS_CONFIG_FILE = 'symbols_config.xlsx'
@@ -84,6 +86,7 @@ def save_signal_history(history):
 
 def send_email_notification(symbol, signal_info, receiver_email):
     """发送邮件通知"""
+    time.sleep(random.uniform(1, 2))
     try:
         # 邮件配置
         smtp_server = os.getenv("SMTP_SERVER")
@@ -93,7 +96,7 @@ def send_email_notification(symbol, signal_info, receiver_email):
         
         # 创建邮件内容
         message = MIMEMultipart()
-        message["Subject"] = f"交易信号提醒 - {symbol} - {signal_info['signal_type']}"
+        message["Subject"] = f"期货合约信号 - {symbol} - {signal_info['signal_type']}"
         message["From"] = sender_email
         message["To"] = receiver_email
 
@@ -109,30 +112,30 @@ def send_email_notification(symbol, signal_info, receiver_email):
             symbol_name = symbol_to_name_dict.get(symbol)
             
         body = f"""
-🚀 发现新的交易信号 🚀
+🚀 新的交易信号 🚀
 
 品种: {symbol_name}
 品种代码: {symbol}
 时间: {signal_time}
 信号类型: {signal_info['signal_type']}
+{'考虑做多' if signal_info['signal_type'] == 'LONG' else '考虑做空' if signal_info['signal_type'] == 'SHORT' else '保持观望'}
+
 价格: {signal_info['price']:.2f}
-RSI: {signal_info['rsi']:.2f}
-ATR: {signal_info['atr']}
 趋势: {'上涨' if signal_info['trend'] == 1 else '下跌' if signal_info['trend'] == -1 else '震荡'}
 力度指数: {signal_info['force_index']:.2f}
 EMA快线: {signal_info['ema_fast']:.2f}
 EMA慢线: {signal_info['ema_slow']:.2f}
-市场强度: {signal_info['market_strength']}
-市场强度分数：{signal_info['market_strength_score']}
 价值上通道: {signal_info['value_up_channel']}
 价值下通道：{signal_info['value_down_channel']}
 价值通道大小：{signal_info['value_size']}
 做多入场价：{signal_info['suggested_buy_long']}
+做多与当前价的距离：{signal_info['distance_to_buy']}
 做空入场价：{signal_info['suggested_sell_short']}
-
-
-📈 交易建议:
-{'考虑做多' if signal_info['signal_type'] == 'LONG' else '考虑做空' if signal_info['signal_type'] == 'SHORT' else '保持观望'}
+做空与当前价的距离: {signal_info['distance_to_sell']}
+市场强度: {signal_info['market_strength']}
+市场强度分数：{signal_info['market_strength_score']}
+RSI: {signal_info['rsi']:.2f}
+ATR: {signal_info['atr']}
 
 ⚠️ 风险提示: 投资有风险，入市需谨慎
 """
@@ -176,10 +179,10 @@ def send_symbol_signal_to_hewei_custom(symbol: str, signal: str):
     
     if is_send:
         send_email_notification(symbol, signal, "vegard@qq.com")
-    
+
 
 def check_new_signals(symbol, current_signals, receiver_email=None):
-    """检查新信号并发送通知"""
+    """检查新信号并发送通知（优化版：收集所有新信号，只发最新一条）"""
     history = load_signal_history()
     
     # 首次检测该品种
@@ -189,7 +192,8 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
         history[symbol] = []
         is_first = True
     
-    new_signals_count = 0
+    # 收集所有新信号
+    new_signals = []
     
     # 获取该品种最新的信号时间
     latest_signal_time = None
@@ -241,36 +245,68 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
             is_time_newer = False
             # print(f"跳过旧信号: {signal_time} <= {latest_signal_time}")
         
-        # 只有既是新信号且时间更新的才发送通知
+        # 记录所有新信号
         if is_new_signal and is_time_newer:
             print(f"🎯 发现新信号: {symbol} - {signal['signal_type']} - {signal_time}")
-            
-            if not is_first and receiver_email:
-                send_email_notification(symbol, signal, receiver_email)
-                send_email_notification(symbol, signal, "717480622@qq.com")
-                send_symbol_signal_to_hewei_custom(symbol=symbol, signal=signal)
-            
-            # 记录到历史
-            history[symbol].append(signal_id)
-            new_signals_count += 1
+            new_signals.append({
+                'signal': signal,
+                'signal_id': signal_id,
+                'signal_time': signal_time
+            })
             
             # 更新最新信号时间
             if not latest_signal_time or signal_time > latest_signal_time:
                 latest_signal_time = signal_time
-            
-            # 只保留最近50个信号记录，避免文件过大
-            if len(history[symbol]) > 50:
-                history[symbol] = history[symbol][-50:]
         elif is_new_signal and not is_time_newer:
             print(f"⚠️  发现重复时间信号，跳过: {signal_id}")
         # else:
         #     print(f"📭 已知信号: {signal_id}")
     
-    if new_signals_count > 0:
+    # 处理收集到的新信号
+    if new_signals:
+        print(f"📊 共收集到 {len(new_signals)} 个新信号")
+        
+        # 如果信号按时间顺序排列，直接取最后一条；否则排序后取最后一条
+        if len(new_signals) > 1:
+            # 检查是否需要排序（确保按时间升序）
+            is_sorted = all(new_signals[i]['signal_time'] <= new_signals[i+1]['signal_time'] 
+                          for i in range(len(new_signals)-1))
+            
+            if not is_sorted:
+                # 按时间排序（从旧到新）
+                new_signals.sort(key=lambda x: x['signal_time'])
+                print("🔄 新信号已按时间排序")
+        
+        # 只发送最新的一条信号
+        latest_signal_info = new_signals[-1]
+        latest_signal = latest_signal_info['signal']
+        
+        if not is_first and receiver_email:
+            global symbol_to_name_dict
+            send_to_dingding(
+                signal=latest_signal,
+                symbol=symbol,
+                symbol_to_name_dict=symbol_to_name_dict
+            )
+            send_email_notification(symbol, signal, receiver_email)
+            send_email_notification(symbol, signal, "717480622@qq.com")
+            print(f"📤 已发送最新信号: {latest_signal_info['signal_id']}")
+        
+        # 将所有新信号记录到历史
+        for signal_info in new_signals:
+            history[symbol].append(signal_info['signal_id'])
+        
+        # 只保留最近50个信号记录
+        if len(history[symbol]) > 50:
+            history[symbol] = history[symbol][-50:]
+        
         save_signal_history(history)
-        print(f"📝 记录了 {new_signals_count} 个新信号")
-    
-    return new_signals_count
+        print(f"📝 已将所有 {len(new_signals)} 个新信号记录到历史")
+        
+        return len(new_signals)
+    else:
+        print(f"📭 没有发现新信号")
+        return 0
 
 def test_day_trading_symbol(symbol='JM2601', gso=True, receiver_email=None):
     '''

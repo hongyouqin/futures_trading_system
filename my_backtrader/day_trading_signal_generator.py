@@ -19,7 +19,7 @@ warnings.filterwarnings('ignore')
 
 class DayTradingSignalGenerator(bt.Strategy):
     params = (
-        ('fi_period', 2),           # ForceIndex计算周期
+        ('fi_period', 3),           # ForceIndex计算周期
         ('atr_period', 14),         # ATR计算周期
         ('rsi_period', 14),         # RSI计算周期
         ('short_ma_period', 8),   # 短期均线周期
