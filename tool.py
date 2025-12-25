@@ -133,87 +133,96 @@ def send_markdown_to_dingding(msg):
         is_at_all=True,
         msg_type="markdown"
     )
-    
 
-def format_signal_as_markdown2(signal_dict, symbol=None, symbol_to_name_dict=None):
-    """将交易信号格式化为钉钉Markdown消息（增强版）"""
-    # 处理时间戳
-    timestamp = signal_dict.get('timestamp')
-    if isinstance(timestamp, datetime):
-        time_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
-    else:
-        time_str = str(timestamp)
+def evaluate_force_index_general(force_index, price, signal_type):
+    """
+    通用力度指数评估函数（适合所有合约）
     
-    # 获取合约名称
-    symbol_name = None
-    if symbol and symbol_to_name_dict:
-        symbol_name = symbol_to_name_dict.get(symbol)
+    参数：
+        force_index: 原始力度指数值
+        price: 当前价格
+        signal_type: 'LONG' 或 'SHORT'
+        
+    返回：
+        (adjusted_score, description)
+    """
     
-    # 信号类型颜色标识
-    signal_type = signal_dict.get('signal_type', 'UNKNOWN')
+    if price <= 0:
+        return 0, "价格无效，无法评估力度"
+    
+    # 计算相对力度百分比
+    force_percent = (force_index / price) * 100
+    
+    # 为每种信号类型定义评估逻辑
     if signal_type == 'LONG':
-        signal_display = '🟢 做多 LONG'
-        action_text = '考虑做多'
+        return _evaluate_long_force(force_percent)
     elif signal_type == 'SHORT':
-        signal_display = '🔴 做空 SHORT'
-        action_text = '考虑做空'
+        return _evaluate_short_force(force_percent)
     else:
-        signal_display = f'⚪ {signal_type}'
-        action_text = '保持观望'
+        return 0, "信号类型无效"
     
-    # 趋势方向判断
-    trend = signal_dict.get('trend', 0)
-    if trend == 1:
-        trend_display = '📈 上涨'
-    elif trend == -1:
-        trend_display = '📉 下跌'
-    else:
-        trend_display = '➡️ 震荡'
+def _evaluate_long_force(force_percent):
+    """评估做多信号的力度"""
     
-    # 构建完整的Markdown消息
-    markdown_text = f"""### 🚀 期货交易信号通知
+    # 做多：负向力度（force_percent < 0）是机会
+    if force_percent < -5.0:  # 极端负向
+        return 3.0, f"🔥 力度极端负向({force_percent:.2f}%)，强烈做多信号"
+    elif force_percent < -2.0:  # 非常负向
+        return 2.5, f"✅ 力度非常负向({force_percent:.2f}%)，优秀做多信号"
+    elif force_percent < -1.0:  # 负向
+        return 2.0, f"✅ 力度负向({force_percent:.2f}%)，良好做多机会"
+    elif force_percent < -0.5:  # 轻微负向
+        return 1.5, f"⚠️ 力度轻微负向({force_percent:.2f}%)，可做多"
+    elif force_percent < -0.2:  # 微弱负向
+        return 1.0, f"⚠️ 力度微弱负向({force_percent:.2f}%)，勉强可做多"
+    elif force_percent < -0.05:  # 极微弱负向
+        return 0.5, f"➖ 力度极微弱负向({force_percent:.2f}%)，谨慎做多"
+    elif force_percent <= 0.05 and force_percent >= -0.05:  # 中性
+        return 0, f"➖ 力度中性({force_percent:.2f}%)"
+    elif force_percent > 5.0:  # 极端正向
+        return -3.0, f"❌ 力度极端正向({force_percent:.2f}%)，严重不适合做多"
+    elif force_percent > 2.0:  # 非常正向
+        return -2.5, f"❌ 力度非常正向({force_percent:.2f}%)，不适合做多"
+    elif force_percent > 1.0:  # 正向
+        return -2.0, f"❌ 力度正向({force_percent:.2f}%)，不建议做多"
+    elif force_percent > 0.5:  # 轻微正向
+        return -1.5, f"⚠️ 力度轻微正向({force_percent:.2f}%)，谨慎做多"
+    elif force_percent > 0.2:  # 微弱正向
+        return -1.0, f"⚠️ 力度微弱正向({force_percent:.2f}%)，不推荐做多"
+    else:  # 0.05% - 0.2%
+        return -0.5, f"➖ 力度极微弱正向({force_percent:.2f}%)，勉强可做多"
 
-**{signal_display}** | **{action_text}**
 
----
-
-#### 📋 合约信息
-- **合约名称**：{symbol_name if symbol_name else '未知'}
-- **合约代码**：`{symbol if symbol else 'N/A'}`
-- **信号时间**：{time_str}
-
-#### 📊 价格与趋势
-- **当前价格**：`{signal_dict.get('price', 0):.2f}`
-- **趋势方向**：{trend_display}
-- **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
-
-#### 🎯 技术指标
-- **EMA快线**：`{signal_dict.get('ema_fast', 0):.2f}`
-- **EMA慢线**：`{signal_dict.get('ema_slow', 0):.2f}`
-- **RSI指标**：`{signal_dict.get('rsi', 0):.2f}`
-- **ATR波动**：`{signal_dict.get('atr', 0):.2f}`
-
-#### 📈 价值通道
-- **上通道**：`{signal_dict.get('value_up_channel', 0):.2f}`
-- **下通道**：`{signal_dict.get('value_down_channel', 0):.2f}`
-- **通道大小**：`{signal_dict.get('value_size', 0)}`
-
-#### 🎮 交易建议
-- **做多入场**：`{float(signal_dict.get('suggested_buy_long', 0)):.2f}`
-- **距做多点**：`{float(signal_dict.get('distance_to_buy', 0)):.2f}`
-- **做空入场**：`{float(signal_dict.get('suggested_sell_short', 0)):.2f}`
-- **距做空点**：`{float(signal_dict.get('distance_to_sell', 0)):.2f}`
-
-#### ⚡ 市场强度
-- **强度描述**：{signal_dict.get('market_strength', 'N/A')}
-- **强度评分**：{signal_dict.get('market_strength_score', 0)}
-
----
-
-> ⚠️ **风险提示**：投资有风险，入市需谨慎  
-"""
-    return markdown_text
-
+def _evaluate_short_force(force_percent):
+    """评估做空信号的力度"""
+    
+    # 做空：正向力度（force_percent > 0）是机会
+    if force_percent > 5.0:  # 极端正向
+        return 3.0, f"🔥 力度极端正向({force_percent:.2f}%)，强烈做空信号"
+    elif force_percent > 2.0:  # 非常正向
+        return 2.5, f"✅ 力度非常正向({force_percent:.2f}%)，优秀做空信号"
+    elif force_percent > 1.0:  # 正向
+        return 2.0, f"✅ 力度正向({force_percent:.2f}%)，良好做空机会"
+    elif force_percent > 0.5:  # 轻微正向
+        return 1.5, f"⚠️ 力度轻微正向({force_percent:.2f}%)，可做空"
+    elif force_percent > 0.2:  # 微弱正向
+        return 1.0, f"⚠️ 力度微弱正向({force_percent:.2f}%)，勉强可做空"
+    elif force_percent > 0.05:  # 极微弱正向
+        return 0.5, f"➖ 力度极微弱正向({force_percent:.2f}%)，谨慎做空"
+    elif force_percent <= 0.05 and force_percent >= -0.05:  # 中性
+        return 0, f"➖ 力度中性({force_percent:.2f}%)"
+    elif force_percent < -5.0:  # 极端负向
+        return -3.0, f"❌ 力度极端负向({force_percent:.2f}%)，严重不适合做空"
+    elif force_percent < -2.0:  # 非常负向
+        return -2.5, f"❌ 力度非常负向({force_percent:.2f}%)，不适合做空"
+    elif force_percent < -1.0:  # 负向
+        return -2.0, f"❌ 力度负向({force_percent:.2f}%)，不建议做空"
+    elif force_percent < -0.5:  # 轻微负向
+        return -1.5, f"⚠️ 力度轻微负向({force_percent:.2f}%)，谨慎做空"
+    elif force_percent < -0.2:  # 微弱负向
+        return -1.0, f"⚠️ 力度微弱负向({force_percent:.2f}%)，不推荐做空"
+    else:  # -0.05% - -0.2%
+        return -0.5, f"➖ 力度极微弱负向({force_percent:.2f}%)，勉强可做空"
 
 def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None):
     """将交易信号格式化为钉钉Markdown消息（带信号质量评估）"""
@@ -264,17 +273,23 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
         suggested_price = float(signal_dict.get('suggested_buy_long', 0))
         distance = float(signal_dict.get('distance_to_buy', 0))
         trading_suggestion_text = f"""#### 🎮 交易建议
+- **当前价格**：`{signal_dict.get('price', 0):.2f}`
 - **做多入场**：`{suggested_price:.2f}`
 - **距做多点**：`{distance:.2f}`
 - **止损点数**：`{stop_loss_points}`
+- **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
+- **趋势**：`{trend_display}`
 """
     elif signal_type == 'SHORT':
         suggested_price = float(signal_dict.get('suggested_sell_short', 0))
         distance = float(signal_dict.get('distance_to_sell', 0))
         trading_suggestion_text = f"""#### 🎮 交易建议
+- **当前价格**：`{signal_dict.get('price', 0):.2f}`
 - **做空入场**：`{suggested_price:.2f}`
 - **距做空点**：`{distance:.2f}`
 - **止损点数**：`{stop_loss_points}`
+- **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
+- **趋势**：`{trend_display}`
 """
     else:
         # 如果是观望信号，显示所有信息
@@ -283,11 +298,14 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
         suggested_sell_short = float(signal_dict.get('suggested_sell_short', 0))
         distance_to_sell = float(signal_dict.get('distance_to_sell', 0))
         trading_suggestion_text = f"""#### 🎮 交易建议
+- **当前价格**：`{signal_dict.get('price', 0):.2f}`
 - **做多入场**：`{suggested_buy_long:.2f}`
 - **距做多点**：`{distance_to_buy:.2f}`
 - **做空入场**：`{suggested_sell_short:.2f}`
 - **距做空点**：`{distance_to_sell:.2f}`
 - **止损点数**：`{stop_loss_points}`
+- **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
+- **趋势**：`{trend_display}`
 """
     
     # ========== 构建Markdown消息 ==========
@@ -310,11 +328,6 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
 - 📊 **建议仓位**：{recommendation['position_size']}
 - ⚠️ **风险等级**：{recommendation['risk_level']}
 - 💡 **策略建议**：{recommendation['suggestion']}
-
-#### 📊 价格与趋势
-- **当前价格**：`{signal_dict.get('price', 0):.2f}`
-- **趋势方向**：{trend_display}
-- **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
 
 #### 🎯 技术指标
 - **EMA快线**：`{signal_dict.get('ema_fast', 0):.2f}`
@@ -485,35 +498,21 @@ def evaluate_signal_quality(signal_dict):
             score -= 1.0
             details.append(f"⚠️ 较近做多触发点({distance_to_buy:.2f})")
     
-    # 5. 力度指数评估
-    if signal_type == 'LONG':
-        if force_index > 0.5:
-            score += 1.0
-            details.append(f"✅ 力度指数强正向({force_index:.2f})")
-        elif force_index > 0:
-            score += 0.5
-            details.append(f"⚠️ 力度指数弱正向({force_index:.2f})")
-        elif force_index < -0.5:
-            score -= 1.5
-            details.append(f"❌ 力度指数强负向({force_index:.2f})")
-        else:
-            score -= 0.5
-            details.append(f"⚠️ 力度指数弱负向({force_index:.2f})")
-            
-    elif signal_type == 'SHORT':
-        if force_index < -0.5:
-            score += 1.0
-            details.append(f"✅ 力度指数强负向({force_index:.2f})")
-        elif force_index < 0:
-            score += 0.5
-            details.append(f"⚠️ 力度指数弱负向({force_index:.2f})")
-        elif force_index > 0.5:
-            score -= 1.5
-            details.append(f"❌ 力度指数强正向({force_index:.2f})")
-        else:
-            score -= 0.5
-            details.append(f"⚠️ 力度指数弱正向({force_index:.2f})")
     
+    # 5. 力度指数评估
+    if price > 0:
+        # 获取力度评估结果
+        force_score, force_desc = evaluate_force_index_general(force_index, price, signal_type)
+        
+        # 调整分数（力度评估占较大权重）
+        score += force_score * 0.8  # 力度评估对总分的权重
+        
+        # 添加描述
+        details.append(force_desc)
+        
+    else:
+        details.append("⚠️ 价格无效，无法评估力度指数")
+
     # 6. 趋势一致性评估
     if signal_type == 'LONG':
         if trend == 1:
