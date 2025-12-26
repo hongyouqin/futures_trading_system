@@ -537,7 +537,7 @@ class FuturesDivergenceReporter:
         # 盘中定时扫描
         for minute in [0, 30]:
             schedule.every().hour.at(f":{minute:02d}").do(
-                lambda: self.scan_all_futures(intervals=['30', '60'])
+                lambda: self.scan_all_futures(intervals=['30', '60', '15', '5'])
             )
         
         # 午间扫描
