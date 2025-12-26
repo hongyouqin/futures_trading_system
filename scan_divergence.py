@@ -559,7 +559,7 @@ class FuturesDivergenceReporter:
         
         # 首次立即执行一次扫描
         print("\n🎯 执行首次扫描...")
-        self.scan_all_futures(intervals=['60', '30'])
+        self.scan_all_futures(intervals=['60', '30', '15', '5'])
         
         # 设置定时任务
         self.setup_schedule()
