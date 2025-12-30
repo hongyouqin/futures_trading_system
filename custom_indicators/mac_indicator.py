@@ -4,11 +4,13 @@ class MovingAverageCrossOver(bt.Indicator):
     '''
         双均线交叉，快线上窜到慢线以上，表示趋势向上，不许做空；反之趋势向下，不准做多。
     '''
-    lines = ('trend','trend_start_price', )
+    lines = ('trend','trend_start_price')
     
     params = (
         ('short_ma_period', 13),   # 短期均线周期（周线级别对应13周）
         ('long_ma_period', 34),    # 长期均线周期（周线级别对应34周）
+        ('adx_period', 14),        # ADX计算周期
+        ('adx_threshold', 25.0),   # ADX趋势强度阈值
     )
     
     def __init__(self):
@@ -19,6 +21,11 @@ class MovingAverageCrossOver(bt.Indicator):
         self.long_ma = bt.indicators.EMA(
             self.data.close, period=self.p.long_ma_period, plotname='长期均线'
         )
+        self.dmi = bt.indicators.DirectionalMovementIndex(
+            self.data, period=self.p.adx_period
+        )
+        # dmi指标包含adx, plusDI, minusDI三条线
+        self.adx = self.dmi.lines.adx
         
         # 记录趋势开始的时间和价格
         self.trend_start_date = None
@@ -34,9 +41,13 @@ class MovingAverageCrossOver(bt.Indicator):
         
         fast_ma = self.short_ma[0]
         slow_ma = self.long_ma[0]
+        current_adx = self.adx[0]
+        
         # print(f"{self.data.datetime.date(0)} fast_ma={fast_ma} slow_ma = {slow_ma}")
         if fast_ma > slow_ma:
-            # 趋势向上
+            # 核心逻辑：ADX必须大于阈值，才认为趋势有"强度"
+            if current_adx < self.p.adx_threshold:
+                return 0  # 市场处于无趋势的震荡状态
             return 1
         elif fast_ma < slow_ma:
             # 趋势向下
@@ -60,8 +71,11 @@ class MovingAverageCrossOver(bt.Indicator):
         '''
         获取当前趋势的详细信息
         '''
+        current_adx = self.adx[0] if len(self.adx) > 0 else None
         return {
             'current_trend': self.lines.trend[0],
+            'adx_value': current_adx,
+            'adx_above_threshold': current_adx >= self.p.adx_threshold if current_adx else False,
             'trend_start_date': self.trend_start_date,
             'trend_start_price': self.trend_start_price,
             'trend_duration': self.get_trend_duration() if self.trend_start_date else 0

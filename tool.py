@@ -266,6 +266,8 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
     # ========== 计算止损点数 ==========
     atr = float(signal_dict.get('atr', 0))
     stop_loss_points = int(round(atr * 2))  # 2倍ATR，取整数
+    trend_stong = float(signal_dict.get('trend_strong', 2))
+    
     
     # ========== 根据信号类型显示交易建议 ==========
     trading_suggestion_text = ""
@@ -278,7 +280,8 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
 - **距做多点**：`{distance:.2f}`
 - **止损点数**：`{stop_loss_points}`
 - **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
-- **趋势**：`{trend_display}`
+- **趋势**：`   {trend_display}`
+- **趋势强度**：`{trend_stong}`
 """
     elif signal_type == 'SHORT':
         suggested_price = float(signal_dict.get('suggested_sell_short', 0))
@@ -289,7 +292,8 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
 - **距做空点**：`{distance:.2f}`
 - **止损点数**：`{stop_loss_points}`
 - **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
-- **趋势**：`{trend_display}`
+- **趋势**：`   {trend_display}`
+- **趋势强度**：`{trend_stong}`
 """
     else:
         # 如果是观望信号，显示所有信息
@@ -305,7 +309,8 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
 - **距做空点**：`{distance_to_sell:.2f}`
 - **止损点数**：`{stop_loss_points}`
 - **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
-- **趋势**：`{trend_display}`
+- **趋势**：    `{trend_display}`
+- **趋势强度**：`{trend_stong}`
 """
     
     # ========== 构建Markdown消息 ==========
@@ -334,16 +339,18 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
 - **EMA慢线**：`{signal_dict.get('ema_slow', 0):.2f}`
 - **RSI指标**：`{signal_dict.get('rsi', 0):.2f}`
 - **ATR波动**：`{signal_dict.get('atr', 0):.2f}`
+- **价值上通道**：`{signal_dict.get('value_up_channel', 0):.2f}`
+- **价值下通道**：`{signal_dict.get('value_down_channel', 0):.2f}`
+- **价值通道大小**：`{signal_dict.get('value_size', 0)}`
+- **突破上通道**：`{signal_dict.get('donchian_up', 0)}`
+- **突破中通道**：`{signal_dict.get('donchian_mid', 0)}`
+- **突破下通道**：`{signal_dict.get('donchian_down', 0)}`
+- **突破通道大小**：`{signal_dict.get('donchian_channel_size', 0)}`
 
-#### 📈 价值通道
-- **上通道**：`{signal_dict.get('value_up_channel', 0):.2f}`
-- **下通道**：`{signal_dict.get('value_down_channel', 0):.2f}`
-- **通道大小**：`{signal_dict.get('value_size', 0)}`
 
 #### 🏆 信号质量评估
 **评估详情：**
 """
-    
     # 添加评估详情
     for detail in quality_details:
         markdown_text += f"- {detail}\n"
@@ -353,7 +360,7 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
 ---
 
 > ⚠️ **风险提示**：投资有风险，入市需谨慎  
-> 📊 **信号质量**仅供参考，请结合实盘情况决策
+> 📊 **入场提示：*： 建议在1分钟或5分钟周期趋势向上时进场
 > 🛡️ **止损保护**：建议严格执行`{stop_loss_points}`点止损
 """
     

@@ -1,6 +1,9 @@
+
+import time
 import backtrader as bt
 import akshare as ak
 import numpy as np
+from custom_indicators.donchian_channel import DonchianChannel
 from custom_indicators.mac_indicator import MovingAverageCrossOver
 from custom_indicators.force_indicator import ForceIndex
 from custom_indicators.dynamic_value_channel import DynamicValueChannel
@@ -35,6 +38,7 @@ class DayTradingSignalGenerator(bt.Strategy):
         ('channel_window', 60),
         ('penetration_lookback_bars', 60),  # 穿透计算回溯周期（60根K线）
         ('penetration_buffer', 0.8),  # 穿透缓冲区（0.8表示使用80%的平均穿透深度）
+        ('donchian_period', 20),  # 添加唐奇安通道周期参数
     )
     
     def __init__(self):
@@ -45,6 +49,12 @@ class DayTradingSignalGenerator(bt.Strategy):
         self.force_index = ForceIndex(self.data, period=self.params.fi_period)
         self.ema_fast = bt.indicators.EMA(self.data, period=self.params.short_ma_period)
         self.ema_slow = bt.indicators.EMA(self.data, period=self.params.long_ma_period)
+        
+        # 添加唐奇安通道到主图
+        self.donchian = DonchianChannel(
+            self.data,
+            period=self.p.donchian_period
+        )
         
         # 第三重滤网：RSI用于离场时机
         self.rsi = bt.indicators.RSI(self.data, period=self.params.rsi_period)
@@ -89,7 +99,7 @@ class DayTradingSignalGenerator(bt.Strategy):
         if self.params.debug:
             dt = dt or self.datas[0].datetime.datetime(0)
             print(f'{dt.isoformat()} {txt}')
-    
+            
     def calculate_penetration_values(self):
         """
         计算向上和向下穿透值
@@ -187,8 +197,6 @@ class DayTradingSignalGenerator(bt.Strategy):
         
         return suggested_buy_long, suggested_sell_short, ema_trend
     
-    
-
     def notify_order(self, order):
         '''订单状态通知'''
         if order.status in [order.Submitted, order.Accepted]:
@@ -284,7 +292,11 @@ class DayTradingSignalGenerator(bt.Strategy):
         else:
             return "市场中性: 信号不明确", 0
         
-    
+    def generate_signal_id_basic(self):
+        """基本的时间戳信号ID"""
+        timestamp_seconds = int(time.time())
+        signal_id = f"SIG_{timestamp_seconds}"
+        return signal_id    
 
     def generate_signal(self):
         
@@ -347,8 +359,10 @@ class DayTradingSignalGenerator(bt.Strategy):
         
         
         signal_info = {
+            'signal_id': self.generate_signal_id_basic(),
             'timestamp': current_time,
             'trend': trend_direction,
+            'trend_strong': self.trend_indicator.adx[0], 
             'force_index': force_value,
             'price': current_price,
             'ema_fast': ema_fast,
@@ -361,6 +375,10 @@ class DayTradingSignalGenerator(bt.Strategy):
             'market_strength_score': market_strength_score,
             'value_up_channel' : round(current_up_channel, 2),
             'value_down_channel' : round(current_down_channel, 2),
+            'donchian_up' : round(self.donchian.lines.upper[0], 2),
+            'donchian_mid' : round(self.donchian.lines.middle[0], 2),
+            'donchian_down' : round(self.donchian.lines.lower[0], 2),
+            'donchian_channel_size' : round(abs(self.donchian_5min.lines.upper[0] - self.donchian_5min.lines.lower[0]), 2),
             'value_size' : round(current_up_channel - current_down_channel),
             # 穿透值相关
             'penetration_up_depth': round(self.penetration_up_depth, 2),
@@ -386,6 +404,8 @@ class DayTradingSignalGenerator(bt.Strategy):
                     signal_info['signal'] = -1
                     signal_info['signal_type'] = 'SHORT'
                     self.log('*** 生成空头信号 ***')
+        else:
+            signal_info['signal'] = 0
         
         # 存储最近信号（仅存储有意义的信号）
         if signal_info['signal'] != 0:
@@ -690,6 +710,7 @@ def print_signals_summary(result):
     
     for i, signal in enumerate(result['recent_signals']):
         print(f"{i+1}. 时间: {signal['timestamp']}")
+        print(f"信号ID: {signal['signal_id']}")
         print(f"   信号: {signal['signal_type']}")
         print(f"   价格: {signal['price']:.2f}")
         print(f"   RSI: {signal['rsi']:.2f}")
