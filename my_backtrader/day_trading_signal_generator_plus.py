@@ -1,9 +1,7 @@
-
 import time
 import backtrader as bt
 import akshare as ak
 import numpy as np
-from custom_indicators.donchian_channel import DonchianChannel
 from custom_indicators.mac_indicator import MovingAverageCrossOver
 from custom_indicators.force_indicator import ForceIndex
 from custom_indicators.dynamic_value_channel import DynamicValueChannel
@@ -17,12 +15,11 @@ warnings.filterwarnings('ignore')
     基于亚历山大·埃尔德的三重滤网交易系统原理
     第一重：1小时数据判断趋势方向
     第二重：15分钟数据寻找交易机会  
-
 '''
 
-class DayTradingSignalGenerator(bt.Strategy):
+class DayTradingSignalGeneratorPlus(bt.Strategy):
     params = (
-        ('fi_period', 2),           # ForceIndex计算周期
+        ('fi_period', 3),           # ForceIndex计算周期
         ('atr_period', 14),         # ATR计算周期
         ('rsi_period', 14),         # RSI计算周期
         ('short_ma_period', 8),   # 短期均线周期
@@ -38,7 +35,6 @@ class DayTradingSignalGenerator(bt.Strategy):
         ('channel_window', 60),
         ('penetration_lookback_bars', 60),  # 穿透计算回溯周期（60根K线）
         ('penetration_buffer', 0.8),  # 穿透缓冲区（0.8表示使用80%的平均穿透深度）
-        ('donchian_period', 20),  # 添加唐奇安通道周期参数
     )
     
     def __init__(self):
@@ -49,12 +45,6 @@ class DayTradingSignalGenerator(bt.Strategy):
         self.force_index = ForceIndex(self.data, period=self.params.fi_period)
         self.ema_fast = bt.indicators.EMA(self.data, period=self.params.short_ma_period)
         self.ema_slow = bt.indicators.EMA(self.data, period=self.params.long_ma_period)
-        
-        # 添加唐奇安通道到主图
-        self.donchian = DonchianChannel(
-            self.data,
-            period=self.p.donchian_period
-        )
         
         # 第三重滤网：RSI用于离场时机
         self.rsi = bt.indicators.RSI(self.data, period=self.params.rsi_period)
@@ -375,10 +365,6 @@ class DayTradingSignalGenerator(bt.Strategy):
             'market_strength_score': market_strength_score,
             'value_up_channel' : round(current_up_channel, 2),
             'value_down_channel' : round(current_down_channel, 2),
-            'donchian_up' : round(self.donchian.lines.upper[0], 2),
-            'donchian_mid' : round(self.donchian.lines.middle[0], 2),
-            'donchian_down' : round(self.donchian.lines.lower[0], 2),
-            'donchian_channel_size' : round(abs(self.donchian.lines.upper[0] - self.donchian.lines.lower[0]), 2),
             'value_size' : round(current_up_channel - current_down_channel),
             # 穿透值相关
             'penetration_up_depth': round(self.penetration_up_depth, 2),
@@ -391,7 +377,7 @@ class DayTradingSignalGenerator(bt.Strategy):
                 
         # 多头信号逻辑
         if trend_direction == 1:  # 上升趋势
-            if force_value < 0 and rsi_value < 70:   # 动量确认
+            if force_value < 0 and rsi_value < 75:   # 动量确认
                 if price_above_fast and price_above_slow:  # 价格在双EMA之上
                     signal_info['signal'] = 1
                     signal_info['signal_type'] = 'LONG'
@@ -474,138 +460,18 @@ class DayTradingSignalGenerator(bt.Strategy):
                 self.entry_time = self.datas[0].datetime.datetime(0)
                 self.log(f'执行空头入场: 价格={price:.2f}, 仓位={size}, 止损={stop_loss:.2f}')
 
-    def manage_position(self):
-        '''持仓管理'''
-        if not self.position:
-            return
-            
-        # current_price = self.data.close[0]
-        
-        # 检查RSI离场条件
-        if self.should_exit_position():
-            self.close()
-            return
-            
-        # # 移动止损逻辑
-        # if self.position.size > 0:  # 多头持仓
-        #     new_stop = current_price * (1 - self.params.trail_percent/100)
-        #     self.stop_loss = max(self.stop_loss, new_stop)
-            
-        #     if current_price <= self.stop_loss:
-        #         self.close()
-        #         self.log(f'多头止损: 价格={current_price:.2f}, 止损={self.stop_loss:.2f}')
-                
-        # elif self.position.size < 0:  # 空头持仓
-        #     new_stop = current_price * (1 + self.params.trail_percent/100)
-        #     self.stop_loss = min(self.stop_loss, new_stop)
-            
-        #     if current_price >= self.stop_loss:
-        #         self.close()
-        #         self.log(f'空头止损: 价格={current_price:.2f}, 止损={self.stop_loss:.2f}')
-
     def next(self):
         '''主逻辑循环'''
-        # 如果有持仓，先执行持仓管理
-        if self.position:
-            self.manage_position()
-        
         # 生成交易信号
-        signal_info = self.generate_signal()
-        
-        # 执行入场（如果没有持仓）
-        if not self.position and signal_info['signal'] != 0:
-            self.execute_entry(signal_info)
-
-    def stop(self):
-        '''策略结束'''
-        self.log('策略运行结束')
-        total_trades = len(self.trades)
-        winning_trades = len([t for t in self.trades if t['pnl'] > 0])
-        win_rate = winning_trades / total_trades if total_trades > 0 else 0
-        
-        # 计算盈亏比
-        total_profit = 0
-        total_loss = 0
-        profit_trades = []
-        loss_trades = []
-        
-        for trade in self.trades:
-            if trade['pnl'] > 0:
-                total_profit += trade['pnl']
-                profit_trades.append(trade['pnl'])
-            else:
-                total_loss += abs(trade['pnl'])
-                loss_trades.append(trade['pnl'])
-        
-        # 计算平均盈利和平均亏损
-        avg_profit = total_profit / len(profit_trades) if profit_trades else 0
-        avg_loss = total_loss / len(loss_trades) if loss_trades else 0
-        
-        # 计算盈亏比
-        if avg_loss > 0:
-            profit_loss_ratio = avg_profit / avg_loss
-        else:
-            profit_loss_ratio = float('inf') if avg_profit > 0 else 0
-        
-        # 计算总盈亏比（总盈利/总亏损）
-        if total_loss > 0:
-            total_profit_loss_ratio = total_profit / total_loss
-        else:
-            total_profit_loss_ratio = float('inf') if total_profit > 0 else 0
-        
-        self.log(f'总交易次数: {total_trades}')
-        self.log(f'胜率: {win_rate:.2%}')
-        self.log(f'盈利交易: {len(profit_trades)} 次')
-        self.log(f'亏损交易: {len(loss_trades)} 次')
-        self.log(f'总盈利: {total_profit:.2f}')
-        self.log(f'总亏损: {total_loss:.2f}')
-        self.log(f'平均盈利: {avg_profit:.2f}')
-        self.log(f'平均亏损: {avg_loss:.2f}')
-        self.log(f'盈亏比 (平均): {profit_loss_ratio:.2f}')
-        self.log(f'盈亏比 (总): {total_profit_loss_ratio:.2f}')
-        self.log(f'净利润: {total_profit - total_loss:.2f}')
-        
-        # 输出信号统计
-        total_signals = len([s for s in self.signals_log if s['signal'] != 0])
-        long_signals = len([s for s in self.signals_log if s['signal'] == 1])
-        short_signals = len([s for s in self.signals_log if s['signal'] == -1])
-        
-        self.log(f'总信号数: {total_signals} (多头: {long_signals}, 空头: {short_signals})')
-        
-        # 输出最近信号
-        self.log('最近交易信号:')
-        for signal in self.recent_signals[-5:]:  # 显示最近5个信号
-            self.log(f"  时间: {signal['timestamp']}, 类型: {signal['signal_type']}, "
-                    f"价格: {signal['price']:.2f}, RSI: {signal['rsi']:.2f}")
-
-    def stop2(self):
-        '''策略结束'''
-        self.log('策略运行结束')
-        total_trades = len(self.trades)
-        winning_trades = len([t for t in self.trades if t['pnl'] > 0])
-        win_rate = winning_trades / total_trades if total_trades > 0 else 0
-        
-        self.log(f'总交易次数: {total_trades}')
-        self.log(f'胜率: {win_rate:.2%}')
-        
-        # 输出信号统计
-        total_signals = len([s for s in self.signals_log if s['signal'] != 0])
-        long_signals = len([s for s in self.signals_log if s['signal'] == 1])
-        short_signals = len([s for s in self.signals_log if s['signal'] == -1])
-        
-        self.log(f'总信号数: {total_signals} (多头: {long_signals}, 空头: {short_signals})')
-        
-        # 输出最近信号
-        self.log('最近交易信号:')
-        for signal in self.recent_signals[-5:]:  # 显示最近5个信号
-            self.log(f"  时间: {signal['timestamp']}, 类型: {signal['signal_type']}, "
-                    f"价格: {signal['price']:.2f}, RSI: {signal['rsi']:.2f}")
-
+        self.generate_signal()
+    
     def get_recent_signals(self, count=5):
         '''获取最近交易信号'''
         return self.recent_signals[-count:] if self.recent_signals else []
+    
 
 
+  
 class FuturesDataFeed(bt.feeds.PandasData):
     """适配期货数据的Backtrader数据源"""
     params = (
@@ -619,7 +485,7 @@ class FuturesDataFeed(bt.feeds.PandasData):
     )
 
 
-def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_signals_only=True, debug_mode = False):
+def run_strategy_with_three_timeframes(symbol='SA0', initial_cash=100000.0, generate_signals_only=True, debug_mode = False):
     """
     运行策略并返回交易信号
     
@@ -666,7 +532,7 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
         cerebro.adddata(data_1hour)  # 趋势数据（1小时）
          
         # 添加策略
-        cerebro.addstrategy(DayTradingSignalGenerator, 
+        cerebro.addstrategy(DayTradingSignalGeneratorPlus, 
                           generate_signals_only=generate_signals_only,
                           debug=debug_mode)
         
@@ -677,7 +543,7 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
         
         # 获取策略实例和信号
         strategy_instance = strategies[0]
-        recent_signals = strategy_instance.get_recent_signals(5)
+        recent_signals = strategy_instance.get_recent_signals(2)
         
         result = {
             'initial_cash': initial_cash,
@@ -726,5 +592,3 @@ def print_signals_summary(result):
         print(f"   离做空卖出价距离: {signal['distance_to_sell']}")
         
         print("-" * 30)
-
-

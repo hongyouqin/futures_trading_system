@@ -3,6 +3,7 @@ import math
 import akshare as ak
 
 import pandas as pd
+from custom_indicators.donchian_channel import DonchianChannel
 from custom_indicators.force_indicator import ForceIndex
 from custom_indicators.dynamic_value_channel import DynamicValueChannel
 import backtrader as bt
@@ -31,9 +32,8 @@ class RSIWithEMA(bt.Indicator):
         )
         
         # 设置绘图参数
-        # self.plotinfo.plotmaster = self.data  # 在主图区域显示
         self.plotinfo.subplot = True  # 作为子图显示
-        
+
 class RSIWith_KD(bt.Indicator):
     '''
     自定义KD指标 - 集成水平线（next方法）
@@ -64,21 +64,17 @@ class RSIWith_KD(bt.Indicator):
         self.lines.d = self.p.movav(self.lines.k, period=self.p.period_dslow)
         
         # 设置样式
-        # 正确的设置方法 - 使用标准的plotlines属性
         self.plotlines.line75.linestyle = '--'
         self.plotlines.line75.color = 'red'
         self.plotlines.line75.label = 'OB 75'
-        self.plotlines.line75._linewidth = 2.5  # 或者 linewidth
 
         self.plotlines.line25.linestyle = '--'
         self.plotlines.line25.color = 'blue'
         self.plotlines.line25.label = 'OS 25'
-        self.plotlines.line25._linewidth = 2.5  # 或者 linewidth
 
         self.plotlines.line50.linestyle = ':'  # 虚线
         self.plotlines.line50.color = 'gray'
         self.plotlines.line50.label = 'MID 50'
-        self.plotlines.line50._linewidth = 1.5  # 或者 linewidth
         
     def next(self):
         # 确保水平线有正确的值
@@ -93,6 +89,7 @@ class TestStrategy(bt.Strategy):
         ('slow', 21),
         ('channel_coeff', 0.152579),
         ('channel_window', 60),
+        ('donchian_period', 20),  # 添加唐奇安通道周期参数
     )
     
     def __init__(self):
@@ -101,7 +98,7 @@ class TestStrategy(bt.Strategy):
         self.sma_fast = bt.indicators.EMA(period=self.p.fast)
         self.rsiwith_kd = RSIWith_KD(self.data)
         self.rsi = RSIWithEMA(self.data)
-        self.atr = bt.indicators.ATR(period = 14)
+        self.atr = bt.indicators.ATR(period=14)
         
         # 动态价值通道指标 - 这会自动显示在主图上
         self.value_channel = DynamicValueChannel(
@@ -110,10 +107,14 @@ class TestStrategy(bt.Strategy):
             channel_window=self.p.channel_window,
             initial_coeff=self.p.channel_coeff
         )
+        
+        # 添加唐奇安通道到主图
+        self.donchian = DonchianChannel(
+            self.data,
+            period=self.p.donchian_period
+        )
     
     def next(self):
-        # 策略逻辑...
-        # 价值通道会自动更新，不需要在这里手动更新
         current_up_channel = self.value_channel.lines.up_channel[0]
         current_down_channel = self.value_channel.lines.down_channel[0]
         print(f"时间={self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M')} atr={self.atr[0]}，价值上通道={current_up_channel}, 价值下通道={current_down_channel}")
@@ -124,7 +125,7 @@ def parse_args():
     '''
     parser = argparse.ArgumentParser(  
         description='期货指标分析')
-    parser.add_argument('--symbol', default="", required= True, 
+    parser.add_argument('--symbol', default="", required=True, 
                         help="期货商品编号")
     parser.add_argument('--period', default="15min", 
                         help="周期: 5min, 15min, 30min")
@@ -167,6 +168,6 @@ if __name__ == '__main__':
     # 运行回测
     results = cerebro.run()
     
-    # 绘制图表 - 使用更兼容的方式
+    # 绘制图表
     cerebro.plot(style='candle', volume=True, barup='red', bardown='green', 
              title=f'{symbol} {period} 期货分析')
