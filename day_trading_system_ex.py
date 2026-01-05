@@ -191,7 +191,7 @@ class DonchianBreakoutMonitor:
         
         try:
             import akshare as ak
-            df_1min = ak.futures_zh_minute_sina(symbol=symbol, period=1)
+            df_1min = ak.futures_zh_minute_sina(symbol=symbol, period=5)
             
             if df_1min.empty:
                 return triggered_signals
