@@ -1,9 +1,12 @@
 import argparse
+import logging
+from logging.handlers import TimedRotatingFileHandler
 import random
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+import sys
 from dotenv import load_dotenv
 
 import pandas as pd
@@ -13,6 +16,7 @@ import time
 import json
 import os
 
+from sql.future_data_manager_mysql import FutureDataManagerMysql
 from tool import send_to_dingding
 
 # 信号记录文件路径
@@ -23,18 +27,24 @@ SIGNAL_HISTORY_FILE = 'signal_history.json'
 
 symbol_to_name_dict = None
 
+# 期货数据管理，mysql版本
+fdmm: FutureDataManagerMysql = None
+
+
+
+
 def load_symbols_from_excel(config_file):
     """从Excel文件加载品种配置"""
     try:
         if not os.path.exists(config_file):
-            print(f"❌ 品种配置文件 {config_file} 不存在")
+            logging.ERROR(f"❌ 品种配置文件 {config_file} 不存在")
             return []
         
         df = pd.read_excel(config_file)
         
         # 检查必要的列是否存在
         if 'symbol' not in df.columns:
-            print("❌ Excel文件中缺少 'symbol' 列")
+            logging.error("❌ Excel文件中缺少 'symbol' 列")
             return []
         
         # 转换成字典
@@ -44,11 +54,11 @@ def load_symbols_from_excel(config_file):
         
         # 返回symbol列表
         symbols = df['symbol'].dropna().tolist()
-        print(f"✅ 从Excel加载了 {len(symbols)} 个品种")
+        logging.info(f"✅ 从Excel加载了 {len(symbols)} 个品种")
         return symbols
         
     except Exception as e:
-        print(f"❌ 读取品种配置文件失败: {e}")
+        logging.error(f"❌ 读取品种配置文件失败: {e}")
         return []
 
 def parse_args():
@@ -148,38 +158,12 @@ ATR: {signal_info['atr']}
         server.sendmail(sender_email, receiver_email, message.as_string())
         server.quit()
         
-        print(f"📧 邮件通知已发送至: {receiver_email}")
+        logging.info(f"📧 邮件通知已发送至: {receiver_email}")
         return True
         
     except Exception as e:
-        print(f"❌ 邮件发送失败: {e}")
+        logging.error(f"❌ 邮件发送失败: {e}")
         return False
-
-def send_symbol_signal_to_hewei_custom(symbol: str, signal: str):
-    '''
-        这个是何威客户期货所要的品种
-    '''
-    is_send = False
-    if symbol.startswith("JM"):
-        is_send = True
-    elif symbol.startswith("AU"):
-        is_send = True
-    elif symbol.startswith("AG"):
-        is_send = True
-    elif symbol.startswith("PT"):
-        is_send = True
-    elif symbol.startswith("PD"):
-        is_send = True
-    elif symbol.startswith("SN"):
-        is_send = True
-    elif symbol.startswith("PS"):
-        is_send = True
-    else:
-        pass
-    
-    if is_send:
-        send_email_notification(symbol, signal, "vegard@qq.com")
-
 
 def check_new_signals(symbol, current_signals, receiver_email=None):
     """检查新信号并发送通知（优化版：收集所有新信号，只发最新一条）"""
@@ -188,7 +172,7 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
     # 首次检测该品种
     is_first = False
     if symbol not in history:
-        print(f"首次检测到品种 {symbol}，跳过邮件通知")
+        logging.info(f"首次检测到品种 {symbol}，跳过邮件通知")
         history[symbol] = []
         is_first = True
     
@@ -213,12 +197,12 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
                         signal_time = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
                     timestamps.append(signal_time)
             except (ValueError, IndexError) as e:
-                print(f"警告: 解析历史信号时间失败 {signal_id}: {e}")
+                logging.warning(f"警告: 解析历史信号时间失败 {signal_id}: {e}")
                 continue
         
         if timestamps:
             latest_signal_time = max(timestamps)
-            print(f"历史最新信号时间: {latest_signal_time}")
+            logging.info(f"历史最新信号时间: {latest_signal_time}")
     
     for signal in current_signals:
         # 确保信号时间戳是datetime对象
@@ -230,7 +214,7 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
                 else:  # 字符串格式
                     signal_time = datetime.strptime(signal_time, '%Y-%m-%d %H:%M:%S')
             except ValueError as e:
-                print(f"警告: 解析当前信号时间失败 {signal_time}: {e}")
+                logging.warning(f"警告: 解析当前信号时间失败 {signal_time}: {e}")
                 continue
         
         # 生成信号唯一标识
@@ -247,7 +231,7 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
         
         # 记录所有新信号
         if is_new_signal and is_time_newer:
-            print(f"🎯 发现新信号: {symbol} - {signal['signal_type']} - {signal_time}")
+            logging.info(f"🎯 发现新信号: {symbol} - {signal['signal_type']} - {signal_time}")
             new_signals.append({
                 'signal': signal,
                 'signal_id': signal_id,
@@ -258,13 +242,13 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
             if not latest_signal_time or signal_time > latest_signal_time:
                 latest_signal_time = signal_time
         elif is_new_signal and not is_time_newer:
-            print(f"⚠️  发现重复时间信号，跳过: {signal_id}")
+            logging.info(f"⚠️  发现重复时间信号，跳过: {signal_id}")
         # else:
         #     print(f"📭 已知信号: {signal_id}")
     
     # 处理收集到的新信号
     if new_signals:
-        print(f"📊 共收集到 {len(new_signals)} 个新信号")
+        logging.info(f"📊 共收集到 {len(new_signals)} 个新信号")
         
         # 如果信号按时间顺序排列，直接取最后一条；否则排序后取最后一条
         if len(new_signals) > 1:
@@ -275,7 +259,7 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
             if not is_sorted:
                 # 按时间排序（从旧到新）
                 new_signals.sort(key=lambda x: x['signal_time'])
-                print("🔄 新信号已按时间排序")
+                logging.info("🔄 新信号已按时间排序")
         
         # 只发送最新的一条信号
         latest_signal_info = new_signals[-1]
@@ -288,9 +272,19 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
                 symbol=symbol,
                 symbol_to_name_dict=symbol_to_name_dict
             )
+            signal_info = latest_signal.copy()
+            signal_info['symbol'] = symbol
+            symbol_name = None
+            if symbol and symbol_to_name_dict:
+                symbol_name = symbol_to_name_dict.get(symbol)
+            signal_info['symbol_name'] = symbol_name
+            logging.info(f"最新信号： {signal_info}")
+            # global fdmm
+            # fdmm.donchian_breakout.register_signal(latest_signal)
+            
             send_email_notification(symbol, signal, receiver_email)
-            send_email_notification(symbol, signal, "717480622@qq.com")
-            print(f"📤 已发送最新信号: {latest_signal_info['signal_id']}")
+            # send_email_notification(symbol, signal, "717480622@qq.com")
+            logging.info(f"📤 已发送最新信号: {latest_signal_info['signal_id']}")
         
         # 将所有新信号记录到历史
         for signal_info in new_signals:
@@ -301,18 +295,18 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
             history[symbol] = history[symbol][-50:]
         
         save_signal_history(history)
-        print(f"📝 已将所有 {len(new_signals)} 个新信号记录到历史")
+        logging.info(f"📝 已将所有 {len(new_signals)} 个新信号记录到历史")
         
         return len(new_signals)
     else:
-        print(f"📭 没有发现新信号")
+        logging.error(f"📭 没有发现新信号")
         return 0
 
 def test_day_trading_symbol(symbol='JM2601', gso=True, receiver_email=None):
     '''
         产生信号
     '''
-    print(f"\n🔍 开始分析品种: {symbol}")
+    logging.info(f"\n🔍 开始分析品种: {symbol}")
     result = run_strategy_with_signals(symbol=symbol, generate_signals_only=gso, debug_mode= True)
     
     if result and result['recent_signals']:
@@ -322,26 +316,26 @@ def test_day_trading_symbol(symbol='JM2601', gso=True, receiver_email=None):
         new_signals = check_new_signals(symbol, result['recent_signals'], receiver_email)
         
         # 输出性能统计
-        print(f"\n📊 性能统计:")
-        print(f"初始资金: {result['initial_cash']:.2f}")
-        print(f"最终资金: {result['final_cash']:.2f}")
-        print(f"总交易次数: {result['total_trades']}")
-        print(f"胜率: {result['performance']['win_rate']:.2%}")
-        print(f"总信号数: {result['performance']['total_signals']}")
-        print(f"新发现信号: {new_signals} 个")
+        logging.info(f"\n📊 性能统计:")
+        logging.info(f"初始资金: {result['initial_cash']:.2f}")
+        logging.info(f"最终资金: {result['final_cash']:.2f}")
+        logging.info(f"总交易次数: {result['total_trades']}")
+        logging.info(f"胜率: {result['performance']['win_rate']:.2%}")
+        logging.info(f"总信号数: {result['performance']['total_signals']}")
+        logging.info(f"新发现信号: {new_signals} 个")
     else:
-        print("❌ 未获取到交易信号")
+        logging.error("❌ 未获取到交易信号")
 
 def scheduled_signal_generation(symbols, gso=True, receiver_email=None):
     """定时信号生成函数（改进版）"""
-    print(f"📈 开始分析 {len(symbols)} 个品种...")
+    logging.info(f"📈 开始分析 {len(symbols)} 个品种...")
     
     all_new_signals = 0
     analyzed_count = 0
     error_count = 0
     
     for symbol in symbols:
-        print(f"\n🔍 分析品种 ({analyzed_count + 1}/{len(symbols)}): {symbol}")
+        logging.info(f"\n🔍 分析品种 ({analyzed_count + 1}/{len(symbols)}): {symbol}")
         try:
             result = run_strategy_with_signals(symbol=symbol, generate_signals_only=gso)
             analyzed_count += 1
@@ -352,7 +346,7 @@ def scheduled_signal_generation(symbols, gso=True, receiver_email=None):
                 all_new_signals += new_signals
                 
                 if new_signals > 0:
-                    print(f"🎯 {symbol} 发现 {new_signals} 个新信号")
+                    logging.info(f"🎯 {symbol} 发现 {new_signals} 个新信号")
                     print_signals_summary({'recent_signals': result['recent_signals']})
                 else:
                     # 显示最新信号时间
@@ -361,36 +355,37 @@ def scheduled_signal_generation(symbols, gso=True, receiver_email=None):
                         signal_time = latest_signal['timestamp']
                         if not isinstance(signal_time, str):
                             signal_time = signal_time.strftime('%Y-%m-%d %H:%M:%S')
-                        print(f"ℹ️  {symbol} 最新信号时间: {signal_time}")
+                        logging.info(f"ℹ️  {symbol} 最新信号时间: {signal_time}")
                 
                 time.sleep(random.uniform(1, 5))
             else:
-                print(f"ℹ️  {symbol} 暂无有效信号")
+                logging.info(f"ℹ️  {symbol} 暂无有效信号")
                 
         except Exception as e:
             error_count += 1
-            print(f"❌ {symbol} 分析失败: {e}")
+            logging.error(f"❌ {symbol} 分析失败: {e}")
     
     # 总结报告
-    print(f"\n📊 分析总结:")
-    print(f"分析时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"   成功分析: {analyzed_count}/{len(symbols)} 个品种")
+    logging.info(f"\n📊 分析总结:")
+    logging.info(f"分析时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logging.info(f"   成功分析: {analyzed_count}/{len(symbols)} 个品种")
     if error_count > 0:
-        print(f"   分析失败: {error_count} 个品种")
-    print(f"   发现新信号: {all_new_signals} 个")
+        logging.warning(f"   分析失败: {error_count} 个品种")
+        
+    logging.info(f"   发现新信号: {all_new_signals} 个")
     
     if all_new_signals == 0:
-        print("📭 本次检查未发现新信号")
+        logging.info("📭 本次检查未发现新信号")
     else:
-        print(f"🎉 本次共发现 {all_new_signals} 个新信号")
+        logging.info(f"🎉 本次共发现 {all_new_signals} 个新信号")
 
 def scheduled_day_trading_task(symbols, gso=True, receiver_email=None, interval=5):
     """定时交易任务"""
-    print(f"🚀 启动定时监控任务")
-    print(f"📈 监控品种: {', '.join(symbols)}")
-    print(f"⏰ 检查间隔: {interval} 分钟")
-    print(f"📧 邮件通知: {'开启' if receiver_email else '关闭'}")
-    print("⏹️  按 Ctrl+C 停止监控")
+    logging.info(f"🚀 启动定时监控任务")
+    logging.info(f"📈 监控品种: {', '.join(symbols)}")
+    logging.info(f"⏰ 检查间隔: {interval} 分钟")
+    logging.info(f"📧 邮件通知: {'开启' if receiver_email else '关闭'}")
+    logging.info("⏹️  按 Ctrl+C 停止监控")
     
     # 立即执行一次
     scheduled_signal_generation(symbols, gso, receiver_email)
@@ -403,7 +398,7 @@ def scheduled_day_trading_task(symbols, gso=True, receiver_email=None, interval=
             schedule.run_pending()
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\n🛑 监控任务已停止")
+        logging.info("\n🛑 监控任务已停止")
         
         
 '''
@@ -433,8 +428,8 @@ def get_symbols(args):
         config_file = args.symbol_config_file
         symbols = load_symbols_from_excel(config_file)
         if not symbols:
-            print("❌ 无法从文件读取品种列表，请检查配置文件")
-            exit(1)
+            logging.info("❌ 无法从文件读取品种列表，请检查配置文件")
+            sys.exit(1)
         return symbols
     elif args.symbol:
         # 从命令行参数读取
@@ -442,12 +437,58 @@ def get_symbols(args):
         symbols = [s for s in symbols if s]
         return symbols
     else:
-        print("❌ 请提供品种参数 --symbol 或使用 --file 从文件读取")
-        exit(1)
+        logging.error("❌ 请提供品种参数 --symbol 或使用 --file 从文件读取")
+        sys.exit(1)
+
+def init_logging():
+    """全局日志配置（在策略初始化前调用）"""
+    log_format = '%(asctime)s [%(levelname)s] %(message)s'
+    log_file = 'logs/day_trading.log'
+    
+    # 创建日志目录
+    os.makedirs('logs', exist_ok=True)
+    
+    # 主日志配置
+    logging.basicConfig(
+        level=logging.INFO,
+        format=log_format,
+        handlers=[
+            TimedRotatingFileHandler(
+                log_file, 
+                when='D',  # 按天切割
+                backupCount=7,
+                encoding='utf-8'
+            ),
+            logging.StreamHandler()
+        ]
+    )
 
 if __name__ == "__main__":
     load_dotenv()
+    init_logging()
     args = parse_args()
+    
+    
+    # host=os.getenv("DB_HOST")
+    # user=os.getenv("DB_USER")
+    # password=os.getenv("DB_PASSWORD")
+    # database = os.getenv("DB_DATABASE")
+    # port=int(os.getenv("DB_PORT")) 
+
+    # logging.info(f"数据库连接信息: host={host}, user={user}, database={database}, port={port}")
+    # fd = FutureDataManagerMysql(
+    #     host=host,
+    #     user=user,
+    #     password=password,
+    #     database=database,
+    #     port=port
+    # )
+    # res = fd._init_database()
+    # if not res:
+    #     sys.exit(1)
+    
+    # fdmm = fd
+    
     
     # 获取品种列表
     symbols = get_symbols(args)
@@ -456,10 +497,10 @@ if __name__ == "__main__":
     gso_bool = args.gso.lower() in ['true', '1']
     receiver_email = args.email
     
-    print(f"📈 交易品种: {', '.join(symbols)}")
-    print(f"🎯 执行模式: {exec_mode}")
-    print(f"🔔 仅生成信号: {gso_bool}")
-    print(f"📧 邮件通知: {receiver_email if receiver_email else '未设置'}")
+    logging.info(f"📈 交易品种: {', '.join(symbols)}")
+    logging.info(f"🎯 执行模式: {exec_mode}")
+    logging.info(f"🔔 仅生成信号: {gso_bool}")
+    logging.info(f"📧 邮件通知: {receiver_email if receiver_email else '未设置'}")
     
     if exec_mode == 'schedule':
         scheduled_day_trading_task(

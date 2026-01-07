@@ -537,7 +537,7 @@ class FuturesDivergenceReporter:
         # 盘中定时扫描
         for minute in [0, 30]:
             schedule.every().hour.at(f":{minute:02d}").do(
-                lambda: self.scan_all_futures(intervals=['30', '60', '15', '5'])
+                lambda: self.scan_all_futures(intervals=['30', '60'])
             )
         
         # 午间扫描
@@ -559,7 +559,7 @@ class FuturesDivergenceReporter:
         
         # 首次立即执行一次扫描
         print("\n🎯 执行首次扫描...")
-        self.scan_all_futures(intervals=['60', '30', '15', '5'])
+        self.scan_all_futures(intervals=['60', '30'])
         
         # 设置定时任务
         self.setup_schedule()
