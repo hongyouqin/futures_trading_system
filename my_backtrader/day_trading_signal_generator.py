@@ -628,6 +628,88 @@ class FuturesDataFeed(bt.feeds.PandasData):
         ('openinterest', 'hold'),
     )
 
+def run_strategy_with_swing_signals(symbol='SA2605', initial_cash=100000.0, generate_signals_only=True, debug_mode = False):
+    """
+    运行策略并返回交易信号
+    
+    Parameters:
+    -----------
+    symbol : str
+        交易品种代码
+    initial_cash : float
+        初始资金
+    generate_signals_only : bool
+        是否仅生成信号而不执行交易
+    
+    Returns:
+    --------
+    dict : 包含策略结果和交易信号的信息
+    """
+    try:
+        # 这里使用您提供的数据获取代码
+        df_daily = ak.futures_zh_daily_sina(symbol=symbol)
+        time.sleep(1)
+        df_30min = ak.futures_zh_minute_sina(symbol=symbol, period=30)
+        time.sleep(1)
+        df_5min = ak.futures_zh_minute_sina(symbol=symbol, period=5) 
+        time.sleep(1)
+        
+        # 数据预处理
+        df_daily['datetime'] = pd.to_datetime(df_daily['date'])
+        df_daily = df_daily.sort_values('datetime')
+        df_30min['datetime'] = pd.to_datetime(df_30min['datetime'])
+        df_30min = df_30min.sort_values('datetime')
+        df_5min['datetime'] = pd.to_datetime(df_5min['datetime'])
+        df_5min = df_5min.sort_values('datetime')
+             
+        
+        # 创建数据源
+        data_daily = FuturesDataFeed(dataname=df_daily)
+        data_30min = FuturesDataFeed(dataname=df_30min)
+        data_5min = FuturesDataFeed(dataname=df_5min)
+        
+        # print(df_15min)
+        # 创建回测引擎
+        cerebro = bt.Cerebro()
+        cerebro.broker.setcash(initial_cash)
+        cerebro.broker.setcommission(commission=0.0005)
+        
+        # 添加数据
+        cerebro.adddata(data_30min)  # 主数据（15分钟）
+        cerebro.adddata(data_daily)  # 趋势数据（4小时）
+        cerebro.adddata(data_5min) #用于计算进场位置
+         
+        # 添加策略
+        cerebro.addstrategy(DayTradingSignalGenerator, 
+                          generate_signals_only=generate_signals_only,
+                          debug=debug_mode)
+        
+        # 运行策略
+        print(f'初始资金: {cerebro.broker.getvalue():.2f}')
+        strategies = cerebro.run()
+        print(f'最终资金: {cerebro.broker.getvalue():.2f}')
+        
+        # 获取策略实例和信号
+        strategy_instance = strategies[0]
+        recent_signals = strategy_instance.get_recent_signals(5)
+        
+        result = {
+            'initial_cash': initial_cash,
+            'final_cash': cerebro.broker.getvalue(),
+            'total_trades': len(strategy_instance.trades),
+            'recent_signals': recent_signals,
+            'all_signals': strategy_instance.signals_log[-20:],  # 最近20个信号
+            'performance': {
+                'win_rate': len([t for t in strategy_instance.trades if t['pnl'] > 0]) / len(strategy_instance.trades) if strategy_instance.trades else 0,
+                'total_signals': len([s for s in strategy_instance.signals_log if s['signal'] != 0])
+            }
+        }
+        
+        return result
+        
+    except Exception as e:
+        print(f"策略运行错误: {e}")
+        return None
 
 def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_signals_only=True, debug_mode = False):
     """
@@ -649,8 +731,11 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
     try:
         # 这里使用您提供的数据获取代码
         df_15min = ak.futures_zh_minute_sina(symbol=symbol, period=15)
+        time.sleep(1)
         df_4hour = ak.futures_zh_minute_sina(symbol=symbol, period=240)
-        df_1min = ak.futures_zh_minute_sina(symbol=symbol, period=1) 
+        time.sleep(1)
+        df_1min = ak.futures_zh_minute_sina(symbol=symbol, period=1)
+        time.sleep(1)
         
         # 数据预处理
         df_15min['datetime'] = pd.to_datetime(df_15min['datetime'])

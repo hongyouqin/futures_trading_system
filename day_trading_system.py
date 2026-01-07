@@ -10,17 +10,20 @@ import sys
 from dotenv import load_dotenv
 
 import pandas as pd
-from my_backtrader.day_trading_signal_generator import run_strategy_with_signals, print_signals_summary
+from my_backtrader.day_trading_signal_generator import run_strategy_with_signals, print_signals_summary, run_strategy_with_swing_signals
 import schedule
 import time
 import json
 import os
 
 from sql.future_data_manager_mysql import FutureDataManagerMysql
-from tool import send_to_dingding
+from tool import send_swing_signal_to_dingding, send_to_dingding
 
 # 信号记录文件路径
 SIGNAL_HISTORY_FILE = 'signal_history.json'
+#波段信号记录文件
+SWING_SIGNAL_HISTORY_FILE = 'swing_signal_history.json'
+
 # SYMBOLS_CONFIG_FILE = 'symbols_config.xlsx'
 #夜盘交易商品
 # SYMBOLS_CONFIG_FILE = 'overnight_symbols_config.xlsx'
@@ -75,23 +78,23 @@ def parse_args():
                         help="从Excel文件读取品种列表")
     parser.add_argument('--gso', choices=['true', 'false', 'True', 'False', '1', '0'], 
                         default='true', help="是否只产生信号")
-    parser.add_argument('--exec', choices=['test', 'schedule'], required=True, 
-                        help="执行模式：test(单个商品测试) 或 schedule(定时执行)")
+    parser.add_argument('--exec', choices=['test', 'schedule', 'swing'], required=True, 
+                        help="执行模式：test(单个商品测试) 或 schedule(定时执行), swing(波段交易定时执行)")
     parser.add_argument('--email', help="接收通知的邮箱地址")
     parser.add_argument('--interval', type=int, default=5, 
                         help="定时执行间隔(分钟)")
     return parser.parse_args()
 
-def load_signal_history():
+def load_signal_history(path = SIGNAL_HISTORY_FILE):
     """加载历史信号记录"""
-    if os.path.exists(SIGNAL_HISTORY_FILE):
-        with open(SIGNAL_HISTORY_FILE, 'r', encoding='utf-8') as f:
+    if os.path.exists(path):
+        with open(path, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {}
 
-def save_signal_history(history):
+def save_signal_history(history, path = SIGNAL_HISTORY_FILE):
     """保存信号记录"""
-    with open(SIGNAL_HISTORY_FILE, 'w', encoding='utf-8') as f:
+    with open(path, 'w', encoding='utf-8') as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
 
 def send_email_notification(symbol, signal_info, receiver_email):
@@ -164,6 +167,135 @@ ATR: {signal_info['atr']}
     except Exception as e:
         logging.error(f"❌ 邮件发送失败: {e}")
         return False
+
+def check_new_swing_signals(symbol, current_signals, receiver_email=None):
+    """检查新信号并发送通知（优化版：收集所有新信号，只发最新一条）"""
+    history = load_signal_history(path = SWING_SIGNAL_HISTORY_FILE)
+    
+    # 首次检测该品种
+    is_first = False
+    if symbol not in history:
+        logging.info(f"首次检测到品种 {symbol}，跳过邮件通知")
+        history[symbol] = []
+        is_first = True
+    
+    # 收集所有新信号
+    new_signals = []
+    
+    # 获取该品种最新的信号时间
+    latest_signal_time = None
+    if history[symbol]:
+        # 从历史记录中提取所有时间戳并找到最新的
+        timestamps = []
+        for signal_id in history[symbol]:
+            try:
+                # 解析信号ID获取时间戳部分
+                parts = signal_id.split('_')
+                if len(parts) >= 3:
+                    time_str = parts[1]  # 时间戳部分
+                    # 尝试解析时间戳
+                    if 'T' in time_str:  # ISO格式
+                        signal_time = datetime.fromisoformat(time_str)
+                    else:  # 字符串格式
+                        signal_time = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+                    timestamps.append(signal_time)
+            except (ValueError, IndexError) as e:
+                logging.warning(f"警告: 解析历史信号时间失败 {signal_id}: {e}")
+                continue
+        
+        if timestamps:
+            latest_signal_time = max(timestamps)
+            logging.info(f"历史最新信号时间: {latest_signal_time}")
+    
+    for signal in current_signals:
+        # 确保信号时间戳是datetime对象
+        signal_time = signal['timestamp']
+        if isinstance(signal_time, str):
+            try:
+                if 'T' in signal_time:  # ISO格式
+                    signal_time = datetime.fromisoformat(signal_time)
+                else:  # 字符串格式
+                    signal_time = datetime.strptime(signal_time, '%Y-%m-%d %H:%M:%S')
+            except ValueError as e:
+                logging.warning(f"警告: 解析当前信号时间失败 {signal_time}: {e}")
+                continue
+        
+        # 生成信号唯一标识
+        signal_id = f"{symbol}_{signal_time.strftime('%Y-%m-%d %H:%M:%S')}_{signal['signal_type']}"
+        
+        # 检查是否是新信号（不在历史记录中）
+        is_new_signal = signal_id not in history[symbol]
+        
+        # 检查时间是否比历史信号新
+        is_time_newer = True
+        if latest_signal_time and signal_time <= latest_signal_time:
+            is_time_newer = False
+            # print(f"跳过旧信号: {signal_time} <= {latest_signal_time}")
+        
+        # 记录所有新信号
+        if is_new_signal and is_time_newer:
+            logging.info(f"🎯 发现新信号: {symbol} - {signal['signal_type']} - {signal_time}")
+            new_signals.append({
+                'signal': signal,
+                'signal_id': signal_id,
+                'signal_time': signal_time
+            })
+            
+            # 更新最新信号时间
+            if not latest_signal_time or signal_time > latest_signal_time:
+                latest_signal_time = signal_time
+        elif is_new_signal and not is_time_newer:
+            logging.info(f"⚠️  发现重复时间信号，跳过: {signal_id}")
+        # else:
+        #     print(f"📭 已知信号: {signal_id}")
+    
+    # 处理收集到的新信号
+    if new_signals:
+        logging.info(f"📊 共收集到 {len(new_signals)} 个新信号")
+        
+        # 如果信号按时间顺序排列，直接取最后一条；否则排序后取最后一条
+        if len(new_signals) > 1:
+            # 检查是否需要排序（确保按时间升序）
+            is_sorted = all(new_signals[i]['signal_time'] <= new_signals[i+1]['signal_time'] 
+                          for i in range(len(new_signals)-1))
+            
+            if not is_sorted:
+                # 按时间排序（从旧到新）
+                new_signals.sort(key=lambda x: x['signal_time'])
+                logging.info("🔄 新信号已按时间排序")
+        
+        # 只发送最新的一条信号
+        latest_signal_info = new_signals[-1]
+        latest_signal = latest_signal_info['signal']
+        
+        if not is_first and receiver_email:
+            global symbol_to_name_dict
+            signal_info = latest_signal.copy()
+            signal_info['symbol'] = symbol
+            symbol_name = None
+            if symbol and symbol_to_name_dict:
+                symbol_name = symbol_to_name_dict.get(symbol)
+            signal_info['symbol_name'] = symbol_name
+            send_swing_signal_to_dingding(
+                signal=signal_info
+            )
+            logging.info(f"📤 已发送最新信号: {latest_signal_info['signal_id']}")
+        
+        # 将所有新信号记录到历史
+        for signal_info in new_signals:
+            history[symbol].append(signal_info['signal_id'])
+        
+        # 只保留最近50个信号记录
+        if len(history[symbol]) > 50:
+            history[symbol] = history[symbol][-50:]
+        
+        save_signal_history(history = history, path= SWING_SIGNAL_HISTORY_FILE)
+        logging.info(f"📝 已将所有 {len(new_signals)} 个新信号记录到历史")
+        
+        return len(new_signals)
+    else:
+        logging.error(f"📭 没有发现新信号")
+        return 0
 
 def check_new_signals(symbol, current_signals, receiver_email=None):
     """检查新信号并发送通知（优化版：收集所有新信号，只发最新一条）"""
@@ -294,7 +426,7 @@ def check_new_signals(symbol, current_signals, receiver_email=None):
         if len(history[symbol]) > 50:
             history[symbol] = history[symbol][-50:]
         
-        save_signal_history(history)
+        save_signal_history(history = history)
         logging.info(f"📝 已将所有 {len(new_signals)} 个新信号记录到历史")
         
         return len(new_signals)
@@ -326,8 +458,64 @@ def test_day_trading_symbol(symbol='JM2601', gso=True, receiver_email=None):
     else:
         logging.error("❌ 未获取到交易信号")
 
+def scheduled_swing_signal_generation(symbols, gso=True, receiver_email=None):
+    '''
+        定时波段信号生成函数
+    '''
+    logging.info(f"📈 开始分析 {len(symbols)} 个品种...")
+    
+    all_new_signals = 0
+    analyzed_count = 0
+    error_count = 0
+    
+    for symbol in symbols:
+        logging.info(f"\n🔍 分析品种 ({analyzed_count + 1}/{len(symbols)}): {symbol}")
+        try:
+            result = run_strategy_with_swing_signals(symbol=symbol, generate_signals_only=gso)
+            analyzed_count += 1
+            
+            if result and result['recent_signals']:
+                # 检查新信号
+                new_signals = check_new_swing_signals(symbol, result['recent_signals'], receiver_email)
+                all_new_signals += new_signals
+                
+                if new_signals > 0:
+                    logging.info(f"🎯 {symbol} 发现 {new_signals} 个新信号")
+                    print_signals_summary({'recent_signals': result['recent_signals']})
+                else:
+                    # 显示最新信号时间
+                    latest_signal = result['recent_signals'][0] if result['recent_signals'] else None
+                    if latest_signal:
+                        signal_time = latest_signal['timestamp']
+                        if not isinstance(signal_time, str):
+                            signal_time = signal_time.strftime('%Y-%m-%d %H:%M:%S')
+                        logging.info(f"ℹ️  {symbol} 最新信号时间: {signal_time}")
+                
+                time.sleep(random.uniform(1, 5))
+            else:
+                logging.info(f"ℹ️  {symbol} 暂无有效信号")
+                
+        except Exception as e:
+            error_count += 1
+            logging.error(f"❌ {symbol} 分析失败: {e}")
+    
+    # 总结报告
+    logging.info(f"\n📊 分析总结:")
+    logging.info(f"分析时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logging.info(f"   成功分析: {analyzed_count}/{len(symbols)} 个品种")
+    if error_count > 0:
+        logging.warning(f"   分析失败: {error_count} 个品种")
+        
+    logging.info(f"   发现新信号: {all_new_signals} 个")
+    
+    if all_new_signals == 0:
+        logging.info("📭 本次检查未发现新信号")
+    else:
+        logging.info(f"🎉 本次共发现 {all_new_signals} 个新信号")
+      
+
 def scheduled_signal_generation(symbols, gso=True, receiver_email=None):
-    """定时信号生成函数（改进版）"""
+    """定时信号生成函数"""
     logging.info(f"📈 开始分析 {len(symbols)} 个品种...")
     
     all_new_signals = 0
@@ -400,13 +588,35 @@ def scheduled_day_trading_task(symbols, gso=True, receiver_email=None, interval=
     except KeyboardInterrupt:
         logging.info("\n🛑 监控任务已停止")
         
+def scheduled_swing_trading_task(symbols, gso=True, receiver_email=None, interval=5):
+    '''
+        波段交易定时任务
+    '''
+    logging.info(f"🚀 启动波段定时监控任务")
+    logging.info(f"📈 监控品种: {', '.join(symbols)}")
+    logging.info(f"⏰ 检查间隔: {interval} 分钟")
+    logging.info("⏹️  按 Ctrl+C 停止监控")
+    
+    # 立即执行一次
+    scheduled_swing_signal_generation(symbols, gso, receiver_email)
+    
+    # 设置定时任务
+    schedule.every(interval).minutes.do(scheduled_swing_signal_generation, symbols, gso, receiver_email)
+    
+    try:
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logging.info("\n🛑 监控任务已停止")
+
         
 '''
 # 从文件监控多个品种
-# 白盘
+# 日内交易  --必须当日倾销
 python day_trading_system.py --file --exec schedule --email yang.qq123@163.com --symbol_config_file symbols_config.xlsx
-# 夜盘
-python day_trading_system.py --file --exec schedule --email yang.qq123@163.com --symbol_config_file overnight_symbols_config.xlsx
+# 日内波段交易 --可过夜
+python day_trading_system.py --file --exec swing --email yang.qq123@163.com --symbol_config_file symbols_config.xlsx
 
 # 监控单个品种，开启邮件通知
 python day_trading_system.py --symbol JM2601 --exec schedule --email your_email@qq.com
@@ -504,6 +714,13 @@ if __name__ == "__main__":
     
     if exec_mode == 'schedule':
         scheduled_day_trading_task(
+            symbols=symbols, 
+            gso=gso_bool, 
+            receiver_email=receiver_email,
+            interval=args.interval
+        )
+    elif exec_mode == 'swing':
+        scheduled_swing_trading_task(
             symbols=symbols, 
             gso=gso_bool, 
             receiver_email=receiver_email,
