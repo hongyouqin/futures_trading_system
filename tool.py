@@ -439,7 +439,7 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
     markdown_text += f"""
 ---
 
-> ⚠️ **风险提示**：投资有风险，入市需谨慎  
+> ⚠️ **信号选择**：信号质量大于5以上的信号为佳
 > 📊 **入场提示**：建议在1分钟或5分钟周期趋势向上时进场
 > 🛡️ **止损保护**：建议严格执行`{stop_loss_points}`点止损
 """
