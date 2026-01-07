@@ -16,7 +16,7 @@ import sys  # To find out the script name (in argv[0])
 '''
 class ForceIndex(bt.Indicator):
     lines = ('force',)
-    params = (('period', 3),)
+    params = (('period', 2),)
     
     # 类级别的绘图配置（关键修改点）
     plotinfo = dict(

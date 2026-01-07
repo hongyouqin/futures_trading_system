@@ -222,6 +222,7 @@ class BatchTrendAnalysisSystem:
         """保存报告到文件"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         dir = f"reports/report_{timestamp}"
+        base_dir = "reports/"
         self.ensure_directory_exists(f"{dir}/1.txt")
         
         # 保存汇总报告
@@ -236,99 +237,646 @@ class BatchTrendAnalysisSystem:
             detailed_df.to_csv(detailed_file, index=False, encoding='utf-8-sig')
             self.logger.info(f"详细报告已保存: {detailed_file}")
             
+            #更新最新的杨希报告，始终在base_dir目录下面保持一份最新的报告
+            lastest_detailed_file = f"{base_dir}/lastest_trend_analysis.csv"
+            lastest_detailed_df = pd.DataFrame(detailed_reports)
+            lastest_detailed_df.to_csv(lastest_detailed_file, index=False, encoding='utf-8-sig')
+            
             # 生成HTML报告
             self.generate_html_report(summary_df, detailed_reports, timestamp, dir)
         else:
             self.logger.warning("没有数据可保存")
 
     def generate_html_report(self, summary_df: pd.DataFrame, detailed_reports: List[Dict], timestamp: str, dir: str):
-        """生成HTML格式的可视化报告"""
+        """生成HTML格式的可视化报告（按市场强度排序）"""
         try:
             html_file = f"{dir}/trend_analysis_report_{timestamp}.html"
+            
+            # 确保有必要的字段
+            summary_df = summary_df.copy()
+            
+            # 如果缺少market_strength，根据market_strength_score生成
+            if 'market_strength' not in summary_df.columns and 'market_strength_score' in summary_df.columns:
+                def get_market_strength_text(score):
+                    if score == 1:
+                        return "市场坚挺"
+                    elif score == -1:
+                        return "市场疲软"
+                    else:
+                        return "市场中性"
+                summary_df['market_strength'] = summary_df['market_strength_score'].apply(get_market_strength_text)
+            
+            # 为市场强度添加详细描述
+            def enrich_market_strength(row):
+                strength = str(row.get('market_strength', ''))
+                price_change = row.get('price_change', 0)
+                volume_change = row.get('volume_change', 0)
+                oi_change = row.get('oi_change', 0)
+                
+                if "坚挺" in strength:
+                    if price_change > 0:
+                        return "市场坚挺: 价涨量增仓升" if volume_change > 0 and oi_change > 0 else "市场坚挺"
+                    else:
+                        return "市场坚挺: 价跌量减仓降" if volume_change < 0 and oi_change < 0 else "市场坚挺"
+                elif "疲软" in strength:
+                    if price_change > 0:
+                        return "市场疲软: 价涨量减仓降" if volume_change < 0 and oi_change < 0 else "市场疲软"
+                    else:
+                        return "市场疲软: 价跌量增仓升" if volume_change > 0 and oi_change > 0 else "市场疲软"
+                return strength
+            
+            if any(col in summary_df.columns for col in ['price_change', 'volume_change', 'oi_change']):
+                summary_df['market_strength'] = summary_df.apply(enrich_market_strength, axis=1)
+            
+            # 按市场强度排序（坚挺 > 中性 > 疲软）
+            def get_market_strength_weight(strength):
+                strength_str = str(strength)
+                if "坚挺" in strength_str:
+                    return 1
+                elif "中性" in strength_str:
+                    return 2
+                elif "疲软" in strength_str:
+                    return 3
+                return 4
+            
+            summary_df['market_strength_weight'] = summary_df['market_strength'].apply(get_market_strength_weight)
+            summary_df = summary_df.sort_values(['market_strength_weight', 'signal_strength'], ascending=[True, False])
+            
+            # 统计数据
+            total_contracts = len(summary_df)
             
             # 信号统计
             buy_signals = len(summary_df[summary_df['buy_signal'] == 1])
             sell_signals = len(summary_df[summary_df['sell_signal'] == 1])
-            total_contracts = len(summary_df)
             
-            # 生成HTML内容
+            # 市场强度统计
+            strong_count = summary_df['market_strength'].str.contains('坚挺', na=False).sum()
+            weak_count = summary_df['market_strength'].str.contains('疲软', na=False).sum()
+            neutral_count = total_contracts - strong_count - weak_count
+            
+            # 生成HTML
             html_content = f"""
             <!DOCTYPE html>
             <html>
             <head>
                 <meta charset="UTF-8">
-                <title>期货趋势分析报告</title>
+                <title>期货市场分析报告</title>
                 <style>
-                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                    .header {{ background: #f4f4f4; padding: 20px; border-radius: 5px; }}
-                    .summary {{ background: #e8f4fd; padding: 15px; margin: 10px 0; border-radius: 5px; }}
-                    .signal-buy {{ background: #d4edda; }}
-                    .signal-sell {{ background: #f8d7da; }}
-                    .signal-none {{ background: #fff3cd; }}
-                    table {{ width: 100%; border-collapse: collapse; margin: 10px 0; }}
-                    th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-                    th {{ background-color: #f2f2f2; }}
-                    .strong {{ color: #28a745; font-weight: bold; }}
-                    .medium {{ color: #ffc107; }}
-                    .weak {{ color: #fd7e14; }}
+                    :root {{
+                        --color-strong: #28a745;
+                        --color-neutral: #ffc107;
+                        --color-weak: #dc3545;
+                        --color-buy: #d4edda;
+                        --color-sell: #f8d7da;
+                        --color-none: #fff3cd;
+                    }}
+                    
+                    body {{
+                        font-family: 'Microsoft YaHei', Arial, sans-serif;
+                        margin: 0;
+                        padding: 20px;
+                        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                        min-height: 100vh;
+                    }}
+                    
+                    .container {{
+                        max-width: 1400px;
+                        margin: 0 auto;
+                        background: white;
+                        border-radius: 15px;
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+                        overflow: hidden;
+                    }}
+                    
+                    .header {{
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        padding: 30px;
+                        text-align: center;
+                    }}
+                    
+                    .header h1 {{
+                        margin: 0;
+                        font-size: 2.5em;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 15px;
+                    }}
+                    
+                    .stats-container {{
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                        gap: 20px;
+                        padding: 25px;
+                        background: #f8f9fa;
+                    }}
+                    
+                    .stat-card {{
+                        background: white;
+                        border-radius: 10px;
+                        padding: 25px;
+                        text-align: center;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                        transition: transform 0.3s ease;
+                        position: relative;
+                        overflow: hidden;
+                    }}
+                    
+                    .stat-card:hover {{
+                        transform: translateY(-5px);
+                        box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+                    }}
+                    
+                    .stat-card::before {{
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        height: 5px;
+                    }}
+                    
+                    .stat-card.strong::before {{ background: var(--color-strong); }}
+                    .stat-card.neutral::before {{ background: var(--color-neutral); }}
+                    .stat-card.weak::before {{ background: var(--color-weak); }}
+                    .stat-card.buy::before {{ background: var(--color-strong); }}
+                    .stat-card.sell::before {{ background: var(--color-weak); }}
+                    .stat-card.none::before {{ background: var(--color-neutral); }}
+                    
+                    .stat-card h3 {{
+                        margin-top: 0;
+                        color: #333;
+                        font-size: 1.2em;
+                    }}
+                    
+                    .stat-number {{
+                        font-size: 3em;
+                        font-weight: bold;
+                        margin: 15px 0;
+                    }}
+                    
+                    .stat-percentage {{
+                        font-size: 1.2em;
+                        color: #666;
+                    }}
+                    
+                    .market-analysis {{
+                        padding: 25px;
+                        background: white;
+                        margin: 20px;
+                        border-radius: 10px;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                    }}
+                    
+                    .market-analysis h2 {{
+                        color: #333;
+                        border-bottom: 2px solid #eaeaea;
+                        padding-bottom: 10px;
+                        margin-top: 0;
+                    }}
+                    
+                    .market-rules {{
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                        gap: 15px;
+                        margin-top: 20px;
+                    }}
+                    
+                    .rule-card {{
+                        padding: 15px;
+                        border-radius: 8px;
+                        border-left: 5px solid;
+                        background: #f8f9fa;
+                    }}
+                    
+                    .rule-card.strong {{ border-left-color: var(--color-strong); }}
+                    .rule-card.weak {{ border-left-color: var(--color-weak); }}
+                    
+                    .rule-card h4 {{
+                        margin-top: 0;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }}
+                    
+                    table {{
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 25px 0;
+                        background: white;
+                        border-radius: 10px;
+                        overflow: hidden;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                    }}
+                    
+                    th, td {{
+                        padding: 15px;
+                        text-align: left;
+                        border-bottom: 1px solid #eaeaea;
+                    }}
+                    
+                    th {{
+                        background: #f8f9fa;
+                        font-weight: 600;
+                        color: #333;
+                        position: sticky;
+                        top: 0;
+                    }}
+                    
+                    tr:hover {{
+                        background: #f8f9fa;
+                    }}
+                    
+                    .strength-indicator {{
+                        display: inline-block;
+                        width: 12px;
+                        height: 12px;
+                        border-radius: 50%;
+                        margin-right: 8px;
+                    }}
+                    
+                    .strength-strong {{ background: var(--color-strong); }}
+                    .strength-neutral {{ background: var(--color-neutral); }}
+                    .strength-weak {{ background: var(--color-weak); }}
+                    
+                    .signal-cell {{
+                        font-weight: bold;
+                        padding: 8px 15px;
+                        border-radius: 20px;
+                        text-align: center;
+                        display: inline-block;
+                    }}
+                    
+                    .signal-buy {{
+                        background: var(--color-buy);
+                        color: #155724;
+                    }}
+                    
+                    .signal-sell {{
+                        background: var(--color-sell);
+                        color: #721c24;
+                    }}
+                    
+                    .signal-none {{
+                        background: var(--color-none);
+                        color: #856404;
+                    }}
+                    
+                    .recommendation {{
+                        font-size: 0.9em;
+                        color: #555;
+                        margin-top: 5px;
+                        line-height: 1.4;
+                    }}
+                    
+                    .filter-controls {{
+                        display: flex;
+                        gap: 10px;
+                        padding: 20px;
+                        background: #f8f9fa;
+                        border-radius: 10px;
+                        margin: 20px;
+                        flex-wrap: wrap;
+                    }}
+                    
+                    .filter-btn {{
+                        padding: 10px 20px;
+                        border: none;
+                        border-radius: 25px;
+                        background: white;
+                        color: #666;
+                        cursor: pointer;
+                        font-weight: 500;
+                        transition: all 0.3s ease;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                    }}
+                    
+                    .filter-btn:hover {{
+                        transform: translateY(-2px);
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                    }}
+                    
+                    .filter-btn.active {{
+                        background: #007bff;
+                        color: white;
+                    }}
+                    
+                    .footer {{
+                        text-align: center;
+                        padding: 25px;
+                        color: #666;
+                        background: #f8f9fa;
+                        border-top: 1px solid #eaeaea;
+                        margin-top: 30px;
+                    }}
+                    
+                    @media (max-width: 768px) {{
+                        .stats-container {{
+                            grid-template-columns: 1fr;
+                        }}
+                        
+                        .market-rules {{
+                            grid-template-columns: 1fr;
+                        }}
+                        
+                        table {{
+                            font-size: 0.9em;
+                        }}
+                        
+                        th, td {{
+                            padding: 10px;
+                        }}
+                    }}
                 </style>
             </head>
             <body>
-                <div class="header">
-                    <h1>📊 期货趋势分析报告</h1>
-                    <p>生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                    <p>分析合约数量: {total_contracts}</p>
-                </div>
-                
-                <div class="summary">
-                    <h2>📈 信号统计</h2>
-                    <p>买入信号: <strong>{buy_signals}</strong> 个</p>
-                    <p>卖出信号: <strong>{sell_signals}</strong> 个</p>
-                    <p>无信号: <strong>{total_contracts - buy_signals - sell_signals}</strong> 个</p>
-                </div>
-                
-                <h2>📋 详细分析结果</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>商品</th>
-                            <th>商品符号</th>
-                            <th>趋势</th>
-                            <th>信号</th>
-                            <th>信号强度</th>
-                            <th>收盘价</th>
-                            <th>市场强度</th>
-                            <th>持仓量状态</th>
-                            <th>ATR相对百分比</th>
-                            <th>分析时间</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                <div class="container">
+                    <div class="header">
+                        <h1>📊 期货市场分析报告</h1>
+                        <p>生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | 分析合约: {total_contracts}个</p>
+                    </div>
+                    
+                    <div class="stats-container">
+                        <div class="stat-card strong">
+                            <h3>🟢 市场坚挺</h3>
+                            <div class="stat-number">{strong_count}</div>
+                            <div class="stat-percentage">{strong_count/total_contracts*100:.1f}%</div>
+                        </div>
+                        
+                        <div class="stat-card neutral">
+                            <h3>🟡 市场中性</h3>
+                            <div class="stat-number">{neutral_count}</div>
+                            <div class="stat-percentage">{neutral_count/total_contracts*100:.1f}%</div>
+                        </div>
+                        
+                        <div class="stat-card weak">
+                            <h3>🔴 市场疲软</h3>
+                            <div class="stat-number">{weak_count}</div>
+                            <div class="stat-percentage">{weak_count/total_contracts*100:.1f}%</div>
+                        </div>
+                        
+                        <div class="stat-card buy">
+                            <h3>📈 买入信号</h3>
+                            <div class="stat-number">{buy_signals}</div>
+                            <div class="stat-percentage">{buy_signals/total_contracts*100:.1f}%</div>
+                        </div>
+                        
+                        <div class="stat-card sell">
+                            <h3>📉 卖出信号</h3>
+                            <div class="stat-number">{sell_signals}</div>
+                            <div class="stat-percentage">{sell_signals/total_contracts*100:.1f}%</div>
+                        </div>
+                        
+                        <div class="stat-card none">
+                            <h3>⏸️ 无信号</h3>
+                            <div class="stat-number">{total_contracts - buy_signals - sell_signals}</div>
+                            <div class="stat-percentage">{(total_contracts - buy_signals - sell_signals)/total_contracts*100:.1f}%</div>
+                        </div>
+                    </div>
+                    
+                    <div class="market-analysis">
+                        <h2>📖 市场强度解读规则</h2>
+                        <div class="market-rules">
+                            <div class="rule-card strong">
+                                <h4><span class="strength-indicator strength-strong"></span>市场坚挺：价涨量增仓升</h4>
+                                <p><strong>含义：</strong>上涨趋势健康，买方力量强劲，趋势可能持续</p>
+                                <p><strong>建议：</strong>关注做多机会，顺势操作</p>
+                            </div>
+                            
+                            <div class="rule-card strong">
+                                <h4><span class="strength-indicator strength-strong"></span>市场坚挺：价跌量减仓降</h4>
+                                <p><strong>含义：</strong>下跌趋势健康，空头有序退出，可能接近底部</p>
+                                <p><strong>建议：</strong>空头减仓，多头可寻找反弹机会</p>
+                            </div>
+                            
+                            <div class="rule-card weak">
+                                <h4><span class="strength-indicator strength-weak"></span>市场疲软：价涨量减仓降</h4>
+                                <p><strong>含义：</strong>上涨动力不足，多头获利了结，可能反转</p>
+                                <p><strong>建议：</strong>谨慎做多，关注反转信号</p>
+                            </div>
+                            
+                            <div class="rule-card weak">
+                                <h4><span class="strength-indicator strength-weak"></span>市场疲软：价跌量增仓升</h4>
+                                <p><strong>含义：</strong>下跌加速，新空头入场，趋势可能延续</p>
+                                <p><strong>建议：</strong>关注做空机会，但注意风险</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-controls">
+                        <button class="filter-btn active" onclick="filterTable('all')">全部显示</button>
+                        <button class="filter-btn" onclick="filterTable('strong')">🟢 市场坚挺</button>
+                        <button class="filter-btn" onclick="filterTable('weak')">🔴 市场疲软</button>
+                        <button class="filter-btn" onclick="filterTable('buy')">📈 买入信号</button>
+                        <button class="filter-btn" onclick="filterTable('sell')">📉 卖出信号</button>
+                        <button class="filter-btn" onclick="filterTable('top10')">🏆 前10名</button>
+                    </div>
+                    
+                    <table id="analysis-table">
+                        <thead>
+                            <tr>
+                                <th width="50">排名</th>
+                                <th width="100">商品</th>
+                                <th width="100">代码</th>
+                                <th width="120">市场强度</th>
+                                <th width="80">趋势</th>
+                                <th width="80">信号</th>
+                                <th width="100">信号强度</th>
+                                <th width="120">收盘价</th>
+                                <th width="120">持仓状态</th>
+                                <th width="80">ATR%</th>
+                                <th>操作建议</th>
+                            </tr>
+                        </thead>
+                        <tbody>
             """
             
-            for _, row in summary_df.iterrows():
-                signal_class = "signal-buy" if row['buy_signal'] == 1 else "signal-sell" if row['sell_signal'] == 1 else "signal-none"
-                signal_text = "买入" if row['buy_signal'] == 1 else "卖出" if row['sell_signal'] == 1 else "无"
-                strength_class = "strong" if row['signal_strength'] >= 80 else "medium" if row['signal_strength'] >= 60 else "weak"
+            for idx, (_, row) in enumerate(summary_df.iterrows(), 1):
+                # 获取数据
+                symbol_name = str(row.get('symbol_name', ''))
+                symbol = str(row.get('symbol', ''))
+                market_strength = str(row.get('market_strength', '市场中性'))
+                trend_text = str(row.get('trend_text', '中性'))
+                close_price = row.get('close_price', 0)
+                oi_status = str(row.get('oi_status', '正常'))
+                atr_percent = row.get('atr_percent', '0.0%')
+                signal_strength = row.get('signal_strength', 0)
+                
+                # 信号判断
+                if row.get('buy_signal') == 1:
+                    signal_text = "买入"
+                    signal_class = "signal-buy"
+                    signal_icon = "📈"
+                elif row.get('sell_signal') == 1:
+                    signal_text = "卖出"
+                    signal_class = "signal-sell"
+                    signal_icon = "📉"
+                else:
+                    signal_text = "无"
+                    signal_class = "signal-none"
+                    signal_icon = "⏸️"
+                
+                # 市场强度样式
+                if "坚挺" in market_strength:
+                    strength_class = "strength-strong"
+                    strength_icon = "🟢"
+                elif "疲软" in market_strength:
+                    strength_class = "strength-weak"
+                    strength_icon = "🔴"
+                else:
+                    strength_class = "strength-neutral"
+                    strength_icon = "🟡"
+                
+                # 趋势样式
+                if "上涨" in trend_text:
+                    trend_class = "trend-up"
+                    trend_icon = "↗️"
+                elif "下跌" in trend_text:
+                    trend_class = "trend-down"
+                    trend_icon = "↘️"
+                else:
+                    trend_class = "trend-neutral"
+                    trend_icon = "➡️"
+                
+                # 信号强度样式
+                if signal_strength >= 80:
+                    strength_level = "强"
+                    strength_color = "color: #28a745; font-weight: bold;"
+                elif signal_strength >= 60:
+                    strength_level = "中"
+                    strength_color = "color: #ffc107; font-weight: bold;"
+                else:
+                    strength_level = "弱"
+                    strength_color = "color: #dc3545; font-weight: bold;"
+                
+                # 生成操作建议
+                recommendation = self._generate_recommendation(row)
                 
                 html_content += f"""
-                        <tr class="{signal_class}">
-                            <td><strong>{row['symbol_name']}</strong></td>
-                            <td>{row['symbol']}</td>
-                            <td>{row['trend_text']}</td>
-                            <td><strong>{signal_text}</strong></td>
-                            <td class="{strength_class}">{row['signal_strength']}% ({row['信号强度分类']})</td>
-                            <td>{row['close_price']:.2f}</td>
-                            <td>{row['market_strength']}</td>
-                            <td>{row['oi_status']}</td>
-                            <td>{row['atr_percent']}</td>
-                            <td>{row['date']}</td>
-                        </tr>
+                            <tr data-strength="{'strong' if '坚挺' in market_strength else 'weak' if '疲软' in market_strength else 'neutral'}" data-signal="{signal_text.lower()}">
+                                <td><strong>{idx}</strong></td>
+                                <td><strong>{symbol_name}</strong></td>
+                                <td><code>{symbol}</code></td>
+                                <td>
+                                    <span class="strength-indicator {strength_class}"></span>
+                                    {strength_icon} {market_strength.split(':')[0] if ':' in market_strength else market_strength}
+                                    <div style="font-size: 0.85em; color: #666; margin-top: 2px;">
+                                        {market_strength.split(':')[1] if ':' in market_strength and len(market_strength.split(':')) > 1 else ''}
+                                    </div>
+                                </td>
+                                <td>{trend_icon} {trend_text}</td>
+                                <td><span class="signal-cell {signal_class}">{signal_icon} {signal_text}</span></td>
+                                <td style="{strength_color}">
+                                    {signal_strength}% ({strength_level})
+                                </td>
+                                <td>{close_price:.2f}</td>
+                                <td>{oi_status}</td>
+                                <td>{atr_percent}</td>
+                                <td>
+                                    {recommendation}
+                                </td>
+                            </tr>
                 """
             
             html_content += """
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                    
+                    <div class="footer">
+                        <p>📋 报告说明</p>
+                        <p>1. 市场坚挺表示趋势健康，疲软表示趋势可能反转或存在风险</p>
+                        <p>2. 建议结合具体技术分析和风险管理进行操作</p>
+                        <p>3. 生成时间: """ + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + """</p>
+                        <p style="color: #999; margin-top: 10px;">⚠️ 投资有风险，入市需谨慎</p>
+                    </div>
+                </div>
+                
+                <script>
+                    function filterTable(type) {{
+                        const rows = document.querySelectorAll('#analysis-table tbody tr');
+                        const buttons = document.querySelectorAll('.filter-btn');
+                        
+                        // 更新按钮状态
+                        buttons.forEach(btn => {{
+                            btn.classList.remove('active');
+                            if (btn.textContent.includes(getButtonText(type))) {{
+                                btn.classList.add('active');
+                            }}
+                        }});
+                        
+                        // 显示数量统计
+                        let visibleCount = 0;
+                        
+                        rows.forEach(row => {{
+                            const strength = row.getAttribute('data-strength');
+                            const signal = row.getAttribute('data-signal');
+                            let showRow = false;
+                            
+                            switch(type) {{
+                                case 'all':
+                                    showRow = true;
+                                    break;
+                                case 'strong':
+                                    showRow = strength === 'strong';
+                                    break;
+                                case 'weak':
+                                    showRow = strength === 'weak';
+                                    break;
+                                case 'buy':
+                                    showRow = signal === '买入';
+                                    break;
+                                case 'sell':
+                                    showRow = signal === '卖出';
+                                    break;
+                                case 'top10':
+                                    showRow = row.querySelector('td:first-child strong').textContent <= 10;
+                                    break;
+                                default:
+                                    showRow = true;
+                            }}
+                            
+                            row.style.display = showRow ? '' : 'none';
+                            if (showRow) visibleCount++;
+                        }});
+                        
+                        // 更新标题显示数量
+                        const header = document.querySelector('.header p');
+                        if (header && type !== 'all') {{
+                            const originalText = header.textContent.split('|')[0];
+                            header.textContent = originalText + ` | 显示: ${{visibleCount}}个`;
+                        }}
+                    }}
+                    
+                    function getButtonText(type) {{
+                        const texts = {{
+                            'all': '全部显示',
+                            'strong': '市场坚挺',
+                            'weak': '市场疲软',
+                            'buy': '买入信号',
+                            'sell': '卖出信号',
+                            'top10': '前10名'
+                        }};
+                        return texts[type] || '';
+                    }}
+                    
+                    // 默认显示前10名
+                    window.onload = function() {{
+                        filterTable('top10');
+                    }};
+                    
+                    // 添加键盘快捷键
+                    document.addEventListener('keydown', (e) => {{
+                        switch(e.key) {{
+                            case '1': filterTable('all'); break;
+                            case '2': filterTable('strong'); break;
+                            case '3': filterTable('weak'); break;
+                            case '4': filterTable('buy'); break;
+                            case '5': filterTable('sell'); break;
+                            case '0': filterTable('top10'); break;
+                        }}
+                    }});
+                </script>
             </body>
             </html>
             """
@@ -337,9 +885,102 @@ class BatchTrendAnalysisSystem:
                 f.write(html_content)
                 
             self.logger.info(f"HTML报告已生成: {html_file}")
+            return html_file
             
         except Exception as e:
             self.logger.error(f"生成HTML报告失败: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return None
+
+
+    def _generate_recommendation(self, row):
+        """生成具体的操作建议"""
+        try:
+            market_strength = str(row.get('market_strength', ''))
+            trend_text = str(row.get('trend_text', ''))
+            
+            # 判断买入信号
+            is_buy_signal = row.get('buy_signal') == 1
+            is_sell_signal = row.get('sell_signal') == 1
+            
+            # 市场强度判断
+            is_strong = "坚挺" in market_strength
+            is_weak = "疲软" in market_strength
+            
+            # 趋势判断
+            is_uptrend = "上涨" in trend_text
+            is_downtrend = "下跌" in trend_text
+            
+            # 详细的市场状态
+            market_detail = ""
+            if "价涨量增仓升" in market_strength:
+                market_detail = "（健康上涨）"
+            elif "价跌量减仓降" in market_strength:
+                market_detail = "（健康下跌）"
+            elif "价涨量减仓降" in market_strength:
+                market_detail = "（上涨乏力）"
+            elif "价跌量增仓升" in market_strength:
+                market_detail = "（下跌加速）"
+            
+            # 生成建议
+            if is_strong:
+                if is_uptrend:
+                    if is_buy_signal:
+                        return f"✅ 健康上涨趋势+买入信号，可考虑做多{market_detail}"
+                    elif is_sell_signal:
+                        return f"⚠️ 健康上涨趋势+卖出信号，逆势风险{market_detail}"
+                    else:
+                        return f"➖ 健康上涨趋势，等待做多机会{market_detail}"
+                elif is_downtrend:
+                    if is_sell_signal:
+                        return f"✅ 健康下跌趋势+卖出信号，可考虑做空{market_detail}"
+                    elif is_buy_signal:
+                        return f"⚠️ 健康下跌趋势+买入信号，逆势风险{market_detail}"
+                    else:
+                        return f"➖ 健康下跌趋势，等待做空机会{market_detail}"
+                else:
+                    if is_buy_signal:
+                        return f"🟢 市场坚挺+买入信号，可轻仓做多{market_detail}"
+                    elif is_sell_signal:
+                        return f"🟢 市场坚挺+卖出信号，可轻仓做空{market_detail}"
+                    else:
+                        return f"➖ 市场坚挺，寻找机会{market_detail}"
+                        
+            elif is_weak:
+                if is_uptrend:
+                    if is_buy_signal:
+                        return f"⚠️ 上涨乏力+买入信号，谨慎做多{market_detail}"
+                    elif is_sell_signal:
+                        return f"✅ 上涨乏力+卖出信号，可考虑做空{market_detail}"
+                    else:
+                        return f"➖ 上涨乏力，观望等待{market_detail}"
+                elif is_downtrend:
+                    if is_sell_signal:
+                        return f"⚠️ 下跌加速+卖出信号，谨慎做空{market_detail}"
+                    elif is_buy_signal:
+                        return f"✅ 下跌加速+买入信号，可考虑做多{market_detail}"
+                    else:
+                        return f"➖ 下跌加速，观望等待{market_detail}"
+                else:
+                    if is_buy_signal:
+                        return f"🔴 市场疲软+买入信号，需谨慎{market_detail}"
+                    elif is_sell_signal:
+                        return f"🔴 市场疲软+卖出信号，需谨慎{market_detail}"
+                    else:
+                        return f"➖ 市场疲软，建议观望{market_detail}"
+                        
+            else:  # 市场中性
+                if is_buy_signal:
+                    return f"🟡 市场中性+买入信号，轻仓试探"
+                elif is_sell_signal:
+                    return f"🟡 市场中性+卖出信号，轻仓试探"
+                else:
+                    return f"➖ 市场中性，等待明确信号"
+                    
+        except Exception as e:
+            self.logger.error(f"生成建议失败: {e}")
+            return "⚠️ 建议生成错误"
 
     def run_analysis(self):
         """运行批量分析"""

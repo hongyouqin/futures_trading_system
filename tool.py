@@ -3,8 +3,11 @@
 import base64
 import hashlib
 import hmac
+import os
 import time
+from typing import Dict
 import urllib
+import pandas as pd
 import requests
 import json
 import urllib.parse
@@ -224,6 +227,80 @@ def _evaluate_short_force(force_percent):
     else:  # -0.05% - -0.2%
         return -0.5, f"➖ 力度极微弱负向({force_percent:.2f}%)，勉强可做空"
 
+
+def get_contract_data(csv_path: str, target_symbol: str) -> Dict:
+    """
+    读取CSV文件，获取具体合约及其主力合约的数据
+    
+    参数：
+        csv_path: CSV文件路径
+        target_symbol: 目标合约代码，如"RB2605"
+    
+    返回：
+        Dict: 包含目标合约和主力合约数据的字典
+    """
+    try:
+        # 检查文件是否存在
+        if not os.path.exists(csv_path):
+            raise FileNotFoundError(f"CSV文件不存在: {csv_path}")
+        
+        # 读取CSV文件
+        df = pd.read_csv(csv_path)
+        
+        # 检查必要列
+        required_columns = ['symbol', 'symbol_name', 'close_price', 'trend_text', 
+                           'market_strength', 'buy_signal', 'sell_signal', 'signal_strength']
+        
+        missing_cols = [col for col in required_columns if col not in df.columns]
+        if missing_cols:
+            raise ValueError(f"CSV文件缺少必要列: {missing_cols}")
+        
+        # 提取品种代码（如RB2605 -> RB）
+        product_code = ''.join([c for c in target_symbol if c.isalpha()])
+        if not product_code:
+            raise ValueError(f"无法从合约代码 {target_symbol} 中提取品种代码")
+        
+        # 构建主力合约代码（如RB -> RB0）
+        main_contract_symbol = f"{product_code}0"
+        
+        # 查找目标合约和主力合约
+        main_data = df[df['symbol'] == main_contract_symbol]
+        if main_data.empty:
+            raise ValueError(f"未找到主力合约: {main_contract_symbol}")
+        
+        # 获取数据
+        main_row = main_data.iloc[0]
+        
+        # 格式化输出
+        result = {
+            'success': True,
+            'main_contract': {
+                'symbol': main_row['symbol'],
+                'symbol_name': main_row['symbol_name'],
+                'close_price': main_row['close_price'],
+                'trend_text': main_row['trend_text'],
+                'market_strength': main_row['market_strength'],
+                'buy_signal': int(main_row['buy_signal']),
+                'sell_signal': int(main_row['sell_signal']),
+                'signal_strength': main_row['signal_strength'],
+                'rsi': main_row.get('rsi', 50),
+                'atr_percent': main_row.get('atr_percent', '0.0%'),
+                'volume_change_pct': main_row.get('volume_change_pct', 0),
+                'oi_change_pct': main_row.get('oi_change_pct', 0),
+                'analysis_time': main_row.get('analysis_time', '')
+            }
+        }
+        
+        return result
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e),
+            'error_type': type(e).__name__
+        }
+
+
 def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None):
     """将交易信号格式化为钉钉Markdown消息（带信号质量评估）"""
     # 处理时间戳
@@ -266,8 +343,7 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
     # ========== 计算止损点数 ==========
     atr = float(signal_dict.get('atr', 0))
     stop_loss_points = int(round(atr * 2))  # 2倍ATR，取整数
-    trend_stong = float(signal_dict.get('trend_strong', 2))
-    
+    trend_strong = float(signal_dict.get('trend_strong', 2))
     
     # ========== 根据信号类型显示交易建议 ==========
     trading_suggestion_text = ""
@@ -276,24 +352,29 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
         distance = float(signal_dict.get('distance_to_buy', 0))
         trading_suggestion_text = f"""#### 🎮 交易建议
 - **当前价格**：`{signal_dict.get('price', 0):.2f}`
-- **做多入场**：`{suggested_price:.2f}`
+- **1分钟入场价**：`{signal_dict.get('enter_donchian_up', 0)}`
+- **均线穿透入场**：`{suggested_price:.2f}`
+- **向上突破价位**：`{signal_dict.get('donchian_up', 0)}`
 - **距做多点**：`{distance:.2f}`
 - **止损点数**：`{stop_loss_points}`
 - **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
-- **趋势**：`   {trend_display}`
-- **趋势强度**：`{trend_stong}`
+- **趋势**：`{trend_display}`
+- **趋势强度**：`{trend_strong:.2f}`
+
 """
     elif signal_type == 'SHORT':
         suggested_price = float(signal_dict.get('suggested_sell_short', 0))
         distance = float(signal_dict.get('distance_to_sell', 0))
         trading_suggestion_text = f"""#### 🎮 交易建议
 - **当前价格**：`{signal_dict.get('price', 0):.2f}`
-- **做空入场**：`{suggested_price:.2f}`
+- **1分钟入场价**：`{signal_dict.get('enter_donchian_down', 0)}`
+- **均线穿透入场**：`{suggested_price:.2f}`
+- **突破价位**：`{signal_dict.get('donchian_down', 0)}`
 - **距做空点**：`{distance:.2f}`
 - **止损点数**：`{stop_loss_points}`
 - **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
-- **趋势**：`   {trend_display}`
-- **趋势强度**：`{trend_stong}`
+- **趋势**：`{trend_display}`
+- **趋势强度**：`{trend_strong:.2f}`
 """
     else:
         # 如果是观望信号，显示所有信息
@@ -309,12 +390,18 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
 - **距做空点**：`{distance_to_sell:.2f}`
 - **止损点数**：`{stop_loss_points}`
 - **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
-- **趋势**：    `{trend_display}`
-- **趋势强度**：`{trend_stong}`
+- **趋势**：`{trend_display}`
+- **趋势强度**：`{trend_strong:.2f}`
 """
     
+    # 获取主力合约数据
+    result = get_contract_data(csv_path="./reports/lastest_trend_analysis.csv", target_symbol=symbol)
+    main_contract_info = None
+    if result["success"]:
+        main_contract_info = f"{result['main_contract']['symbol']}|{result['main_contract']['trend_text']}|{result['main_contract']['market_strength']}"
+    
     # ========== 构建Markdown消息 ==========
-    markdown_text = f"""### 🚀 期货交易信号通知
+    markdown_text = f"""### 🚀 期货交易15分钟周期信号
 
 **{signal_display}** | **{action_text}**
 
@@ -325,6 +412,7 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
 - **合约代码**：`{symbol if symbol else 'N/A'}`
 - **信号时间**：{time_str}
 - **信号质量**：{quality_level} **{quality_score}/10** ({quality_text})
+- **日趋势**：{main_contract_info}
 
 {trading_suggestion_text}
 
@@ -335,18 +423,10 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
 - 💡 **策略建议**：{recommendation['suggestion']}
 
 #### 🎯 技术指标
-- **EMA快线**：`{signal_dict.get('ema_fast', 0):.2f}`
-- **EMA慢线**：`{signal_dict.get('ema_slow', 0):.2f}`
-- **RSI指标**：`{signal_dict.get('rsi', 0):.2f}`
-- **ATR波动**：`{signal_dict.get('atr', 0):.2f}`
-- **价值上通道**：`{signal_dict.get('value_up_channel', 0):.2f}`
-- **价值下通道**：`{signal_dict.get('value_down_channel', 0):.2f}`
-- **价值通道大小**：`{signal_dict.get('value_size', 0)}`
-- **突破上通道**：`{signal_dict.get('donchian_up', 0)}`
-- **突破中通道**：`{signal_dict.get('donchian_mid', 0)}`
-- **突破下通道**：`{signal_dict.get('donchian_down', 0)}`
-- **突破通道大小**：`{signal_dict.get('donchian_channel_size', 0)}`
-
+- **均线指标**：EMA快线=`{signal_dict.get('ema_fast', 0):.2f}` | EMA慢线=`{signal_dict.get('ema_slow', 0):.2f}`
+- **动量指标**：RSI=`{signal_dict.get('rsi', 0):.2f}` | 力度指数=`{signal_dict.get('force_index', 0):.2f}` | ATR=`{signal_dict.get('atr', 0):.2f}`
+- **价值通道**：上通道=`{signal_dict.get('value_up_channel', 0):.2f}` | 下通道=`{signal_dict.get('value_down_channel', 0):.2f}` | 大小=`{signal_dict.get('value_size', 0)}`
+- **突破通道**：上轨=`{signal_dict.get('donchian_up', 0)}` | 中轨=`{signal_dict.get('donchian_mid', 0)}` | 下轨=`{signal_dict.get('donchian_down', 0)}` | 大小=`{signal_dict.get('donchian_channel_size', 0)}`
 
 #### 🏆 信号质量评估
 **评估详情：**
@@ -360,7 +440,7 @@ def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None
 ---
 
 > ⚠️ **风险提示**：投资有风险，入市需谨慎  
-> 📊 **入场提示：*： 建议在1分钟或5分钟周期趋势向上时进场
+> 📊 **入场提示**：建议在1分钟或5分钟周期趋势向上时进场
 > 🛡️ **止损保护**：建议严格执行`{stop_loss_points}`点止损
 """
     
@@ -398,196 +478,292 @@ def evaluate_signal_quality(signal_dict):
     value_down = signal_dict.get('value_down_channel', 0)
     value_size = signal_dict.get('value_size', 0)
     
-    # 1. 市场强度评分（最重要的因素之一）
+    # 1. 市场强度评分（提高权重，最关键的因素）
     if market_strength_score == 1:
-        score += 2.0
-        details.append("✅ 市场强度坚挺")
+        score += 3.5  # 大幅提高权重（从2.0提高到3.5）
+        details.append("✅ 市场强度坚挺（高权重+3.5）")
+        
+        # 当市场强度坚挺时，进一步检查信号与市场强度的一致性
+        if signal_type == 'LONG':
+            details.append("✅ 做多信号与市场强势一致")
+        elif signal_type == 'SHORT':
+            # 做空信号与市场强势矛盾，需要谨慎
+            score -= 1.0  # 适当扣分
+            details.append("⚠️ 做空信号与市场强势矛盾，需谨慎")
+            
     elif market_strength_score == -1:
-        score -= 2.0
-        details.append("❌ 市场强度疲软")
+        score -= 3.5  # 同等权重降低（从-2.0到-3.5）
+        details.append("❌ 市场强度疲软（高权重-3.5）")
+        
+        # 当市场疲软时，检查信号与市场状态的一致性
+        if signal_type == 'SHORT':
+            details.append("✅ 做空信号与市场疲软一致")
+        elif signal_type == 'LONG':
+            # 做多信号与市场疲软矛盾，风险更高
+            score -= 1.5  # 额外扣分
+            details.append("❌ 做多信号与市场疲软矛盾，风险高")
     else:
-        details.append("➖ 市场强度中性")
+        details.append("➖ 市场强度中性（无加减分）")
     
     # 2. RSI评估（避免超买超卖区）
+    # 增加与市场强度的联动评估
+    rsi_weight = 1.0
+    if market_strength_score == 1:
+        # 市场强势时，RSI超买的容忍度提高
+        rsi_weight = 0.8  # 降低RSI权重
+    elif market_strength_score == -1:
+        # 市场疲软时，RSI超卖的容忍度提高
+        rsi_weight = 0.8  # 降低RSI权重
+    
     if signal_type == 'LONG':
         if rsi > 70:
-            score -= 2.0
-            details.append("❌ RSI超买区，回调风险高")
+            score -= 2.0 * rsi_weight
+            details.append(f"❌ RSI超买区{'（市场强势，风险略降）' if market_strength_score == 1 else ''}")
         elif rsi > 65:
-            score -= 1.0
-            details.append("⚠️ RSI接近超买")
+            score -= 1.0 * rsi_weight
+            details.append(f"⚠️ RSI接近超买{'（市场强势，影响较小）' if market_strength_score == 1 else ''}")
         elif 40 < rsi < 65:
-            score += 1.0
-            details.append("✅ RSI多头健康区间")
+            score += 1.0 * rsi_weight
+            details.append(f"✅ RSI多头健康区间{'（市场强势，效果增强）' if market_strength_score == 1 else ''}")
         elif rsi < 40:
-            score += 0.5
-            details.append("⚠️ RSI偏弱但可能有反弹")
+            score += 0.5 * rsi_weight
+            details.append(f"⚠️ RSI偏弱但可能有反弹{'（市场强势，反弹概率增加）' if market_strength_score == 1 else ''}")
             
     elif signal_type == 'SHORT':
         if rsi < 30:
-            score -= 2.0
-            details.append("❌ RSI超卖区，反弹风险高")
+            score -= 2.0 * rsi_weight
+            details.append(f"❌ RSI超卖区{'（市场疲软，风险略降）' if market_strength_score == -1 else ''}")
         elif rsi < 35:
-            score -= 1.0
-            details.append("⚠️ RSI接近超卖")
+            score -= 1.0 * rsi_weight
+            details.append(f"⚠️ RSI接近超卖{'（市场疲软，影响较小）' if market_strength_score == -1 else ''}")
         elif 35 < rsi < 60:
-            score += 1.0
-            details.append("✅ RSI空头健康区间")
+            score += 1.0 * rsi_weight
+            details.append(f"✅ RSI空头健康区间{'（市场疲软，效果增强）' if market_strength_score == -1 else ''}")
         elif rsi > 60:
-            score += 0.5
-            details.append("⚠️ RSI偏强但可能有回调")
+            score += 0.5 * rsi_weight
+            details.append(f"⚠️ RSI偏强但可能有回调{'（市场疲软，回调概率增加）' if market_strength_score == -1 else ''}")
     
     # 3. EMA排列评估
+    # 增加市场强度对EMA排列的权重影响
+    ema_weight = 1.0
+    if abs(market_strength_score) == 1:
+        ema_weight = 1.2  # 市场有明显趋势时，EMA排列更重要
+    
     if signal_type == 'LONG':
         if ema_fast > ema_slow:
             diff_percent = ((ema_fast - ema_slow) / ema_slow * 100) if ema_slow != 0 else 0
             if diff_percent > 0.5:
-                score += 2.0
-                details.append(f"✅ EMA强势多头排列(+{diff_percent:.2f}%)")
+                score += 2.0 * ema_weight
+                details.append(f"✅ EMA强势多头排列(+{diff_percent:.2f}%){'（市场强势，加成更高）' if market_strength_score == 1 else ''}")
             else:
-                score += 1.0
-                details.append("✅ EMA多头排列")
+                score += 1.0 * ema_weight
+                details.append(f"✅ EMA多头排列{'（市场强势，更加可靠）' if market_strength_score == 1 else ''}")
         else:
-            score -= 1.5
-            details.append("❌ EMA空头排列，与信号方向矛盾")
+            penalty = -1.5
+            if market_strength_score == 1:
+                penalty = -2.0  # 市场强势时，EMA空头排列的矛盾更严重
+            score += penalty * ema_weight
+            details.append(f"❌ EMA空头排列，与信号方向矛盾{'（与市场强势严重矛盾）' if market_strength_score == 1 else ''}")
             
     elif signal_type == 'SHORT':
         if ema_fast < ema_slow:
             diff_percent = ((ema_slow - ema_fast) / ema_fast * 100) if ema_fast != 0 else 0
             if diff_percent > 0.5:
-                score += 2.0
-                details.append(f"✅ EMA强势空头排列(+{diff_percent:.2f}%)")
+                score += 2.0 * ema_weight
+                details.append(f"✅ EMA强势空头排列(+{diff_percent:.2f}%){'（市场疲软，加成更高）' if market_strength_score == -1 else ''}")
             else:
-                score += 1.0
-                details.append("✅ EMA空头排列")
+                score += 1.0 * ema_weight
+                details.append(f"✅ EMA空头排列{'（市场疲软，更加可靠）' if market_strength_score == -1 else ''}")
         else:
-            score -= 1.5
-            details.append("❌ EMA多头排列，与信号方向矛盾")
+            penalty = -1.5
+            if market_strength_score == -1:
+                penalty = -2.0  # 市场疲软时，EMA多头排列的矛盾更严重
+            score += penalty * ema_weight
+            details.append(f"❌ EMA多头排列，与信号方向矛盾{'（与市场疲软严重矛盾）' if market_strength_score == -1 else ''}")
     
     # 4. 价格位置评估（入场距离和触发风险）
+    # 市场强度影响风险容忍度
+    distance_weight = 1.0
+    if abs(market_strength_score) == 1:
+        distance_weight = 1.2  # 市场有趋势时，入场位置更重要
+    
     if signal_type == 'LONG':
         # 检查做多入场距离
         if distance_to_buy < 1.0 and distance_to_buy > 0:
-            score += 1.5
-            details.append(f"✅ 做多点位接近({distance_to_buy:.2f})")
+            bonus = 1.5
+            if market_strength_score == 1:
+                bonus = 1.8  # 市场强势时，接近入场点的优势更大
+            score += bonus * distance_weight
+            details.append(f"✅ 做多点位接近({distance_to_buy:.2f}){'（市场强势，优势放大）' if market_strength_score == 1 else ''}")
         elif distance_to_buy < 2.0:
-            score += 0.5
+            score += 0.5 * distance_weight
             details.append(f"⚠️ 做多点位中等距离({distance_to_buy:.2f})")
         else:
-            score -= 0.5
-            details.append(f"❌ 做多点位较远({distance_to_buy:.2f})")
+            score -= 0.5 * distance_weight
+            details.append(f"❌ 做多点位较远({distance_to_buy:.2f}){'（市场强势仍有机会）' if market_strength_score == 1 else ''}")
         
         # 检查是否接近做空触发点（风险）
         if distance_to_sell < 1.0:
-            score -= 2.0
-            details.append(f"❌ 接近做空触发点({distance_to_sell:.2f})，风险高")
+            penalty = -2.0
+            if market_strength_score == -1:
+                penalty = -2.5  # 市场疲软时，接近做空点的风险更大
+            score += penalty * distance_weight
+            details.append(f"❌ 接近做空触发点({distance_to_sell:.2f})，风险高{'（市场疲软，风险更高）' if market_strength_score == -1 else ''}")
         elif distance_to_sell < 2.0:
-            score -= 1.0
+            score -= 1.0 * distance_weight
             details.append(f"⚠️ 较近做空触发点({distance_to_sell:.2f})")
             
     elif signal_type == 'SHORT':
         # 检查做空入场距离
         if distance_to_sell < 1.0 and distance_to_sell > 0:
-            score += 1.5
-            details.append(f"✅ 做空点位接近({distance_to_sell:.2f})")
+            bonus = 1.5
+            if market_strength_score == -1:
+                bonus = 1.8  # 市场疲软时，接近入场点的优势更大
+            score += bonus * distance_weight
+            details.append(f"✅ 做空点位接近({distance_to_sell:.2f}){'（市场疲软，优势放大）' if market_strength_score == -1 else ''}")
         elif distance_to_sell < 2.0:
-            score += 0.5
+            score += 0.5 * distance_weight
             details.append(f"⚠️ 做空点位中等距离({distance_to_sell:.2f})")
         else:
-            score -= 0.5
-            details.append(f"❌ 做空点位较远({distance_to_sell:.2f})")
+            score -= 0.5 * distance_weight
+            details.append(f"❌ 做空点位较远({distance_to_sell:.2f}){'（市场疲软仍有机会）' if market_strength_score == -1 else ''}")
         
         # 检查是否接近做多触发点（风险）
         if distance_to_buy < 1.0:
-            score -= 2.0
-            details.append(f"❌ 接近做多触发点({distance_to_buy:.2f})，风险高")
+            penalty = -2.0
+            if market_strength_score == 1:
+                penalty = -2.5  # 市场强势时，接近做多点的风险更大
+            score += penalty * distance_weight
+            details.append(f"❌ 接近做多触发点({distance_to_buy:.2f})，风险高{'（市场强势，风险更高）' if market_strength_score == 1 else ''}")
         elif distance_to_buy < 2.0:
-            score -= 1.0
+            score -= 1.0 * distance_weight
             details.append(f"⚠️ 较近做多触发点({distance_to_buy:.2f})")
     
     
-    # 5. 力度指数评估
+    # 5. 力度指数评估（与市场强度联动）
     if price > 0:
         # 获取力度评估结果
         force_score, force_desc = evaluate_force_index_general(force_index, price, signal_type)
         
-        # 调整分数（力度评估占较大权重）
-        score += force_score * 0.8  # 力度评估对总分的权重
+        # 根据市场强度调整力度权重
+        force_weight = 0.8
+        if abs(market_strength_score) == 1:
+            force_weight = 1.0  # 市场有趋势时，力度指数更重要
         
-        # 添加描述
+        # 调整分数
+        score += force_score * force_weight
+        
+        # 添加描述（包含市场强度信息）
+        if market_strength_score == 1 and force_score > 0:
+            force_desc += "（市场强势，力度更可靠）"
+        elif market_strength_score == -1 and force_score > 0 and signal_type == 'SHORT':
+            force_desc += "（市场疲软，下跌力度更可靠）"
+        
         details.append(force_desc)
         
     else:
         details.append("⚠️ 价格无效，无法评估力度指数")
 
     # 6. 趋势一致性评估
+    # 如果市场强度已经有明确指示，趋势评估的重要性相对降低
+    trend_weight = 1.0
+    if abs(market_strength_score) == 1:
+        trend_weight = 0.7  # 市场强度已经提供了趋势信息
+
     if signal_type == 'LONG':
         if trend == 1:
-            score += 1.0
-            details.append("✅ 趋势方向一致(上涨)")
+            score += 1.0 * trend_weight
+            details.append("✅ 趋势方向一致(上涨)" + f"{'（与市场强势叠加）' if market_strength_score == 1 else ''}")
         elif trend == -1:
-            score -= 1.0
-            details.append("❌ 趋势方向相反(下跌)")
+            score -= 1.0 * trend_weight
+            details.append("❌ 趋势方向相反(下跌)" + f"{'（与市场强势严重冲突）' if market_strength_score == 1 else ''}")
         else:
             details.append("➖ 趋势震荡中")
             
     elif signal_type == 'SHORT':
         if trend == -1:
-            score += 1.0
-            details.append("✅ 趋势方向一致(下跌)")
+            score += 1.0 * trend_weight
+            details.append("✅ 趋势方向一致(下跌)" + f"{'（与市场疲软叠加）' if market_strength_score == -1 else ''}")
         elif trend == 1:
-            score -= 1.0
-            details.append("❌ 趋势方向相反(上涨)")
+            score -= 1.0 * trend_weight
+            details.append("❌ 趋势方向相反(上涨)" + f"{'（与市场疲软严重冲突）' if market_strength_score == -1 else ''}")
         else:
             details.append("➖ 趋势震荡中")
     
     # 7. 波动性评估（ATR）
     if atr > 0:
         atr_percent = (atr / price * 100) if price != 0 else 0
-        if atr_percent > 0.5:
-            score += 0.5
-            details.append(f"✅ 波动性充足({atr_percent:.2f}%)")
-        elif atr_percent > 0.2:
-            details.append(f"➖ 波动性适中({atr_percent:.2f}%)")
+        
+        # 市场强度影响对波动性的要求
+        if abs(market_strength_score) == 1:
+            # 有趋势时，需要足够的波动性
+            if atr_percent > 0.3:
+                score += 0.5
+                details.append(f"✅ 趋势中波动性充足({atr_percent:.2f}%)")
+            else:
+                score -= 0.8
+                details.append(f"❌ 趋势中波动性不足({atr_percent:.2f}%)")
         else:
-            score -= 0.5
-            details.append(f"⚠️ 波动性较低({atr_percent:.2f}%)")
+            # 无趋势时，波动性要求可适当降低
+            if atr_percent > 0.5:
+                score += 0.5
+                details.append(f"✅ 波动性充足({atr_percent:.2f}%)")
+            elif atr_percent > 0.2:
+                details.append(f"➖ 波动性适中({atr_percent:.2f}%)")
+            else:
+                score -= 0.5
+                details.append(f"⚠️ 波动性较低({atr_percent:.2f}%)")
     
     # 8. 通道位置评估
     if value_up > 0 and value_down > 0 and price > 0:
         channel_middle = (value_up + value_down) / 2
         position_in_channel = (price - value_down) / (value_up - value_down) * 100 if (value_up - value_down) != 0 else 50
         
+        # 市场强度影响通道位置的重要性
+        channel_weight = 1.0
+        if abs(market_strength_score) == 1:
+            channel_weight = 1.3  # 有趋势时，通道位置更重要
+
         if signal_type == 'LONG':
             if position_in_channel < 30:
-                score += 1.0
-                details.append(f"✅ 通道底部位置({position_in_channel:.1f}%)")
+                score += 1.0 * channel_weight
+                details.append(f"✅ 通道底部位置({position_in_channel:.1f}%){'（市场强势，反弹动力强）' if market_strength_score == 1 else ''}")
             elif position_in_channel < 50:
-                score += 0.5
+                score += 0.5 * channel_weight
                 details.append(f"⚠️ 通道中下部({position_in_channel:.1f}%)")
             elif position_in_channel > 70:
-                score -= 1.5
-                details.append(f"❌ 通道顶部位置({position_in_channel:.1f}%)")
+                score -= 1.5 * channel_weight
+                details.append(f"❌ 通道顶部位置({position_in_channel:.1f}%){'（市场强势，但位置不佳）' if market_strength_score == 1 else ''}")
             else:
                 details.append(f"➖ 通道中部({position_in_channel:.1f}%)")
                 
         elif signal_type == 'SHORT':
             if position_in_channel > 70:
-                score += 1.0
-                details.append(f"✅ 通道顶部位置({position_in_channel:.1f}%)")
+                score += 1.0 * channel_weight
+                details.append(f"✅ 通道顶部位置({position_in_channel:.1f}%){'（市场疲软，下跌动力强）' if market_strength_score == -1 else ''}")
             elif position_in_channel > 50:
-                score += 0.5
+                score += 0.5 * channel_weight
                 details.append(f"⚠️ 通道中上部({position_in_channel:.1f}%)")
             elif position_in_channel < 30:
-                score -= 1.5
-                details.append(f"❌ 通道底部位置({position_in_channel:.1f}%)")
+                score -= 1.5 * channel_weight
+                details.append(f"❌ 通道底部位置({position_in_channel:.1f}%){'（市场疲软，但位置不佳）' if market_strength_score == -1 else ''}")
             else:
                 details.append(f"➖ 通道中部({position_in_channel:.1f}%)")
+    
+    # 9. 新增：市场强度综合评估（信号与市场强度的匹配度）
+    if abs(market_strength_score) == 1:
+        # 检查信号类型与市场强度的匹配度
+        if (market_strength_score == 1 and signal_type == 'LONG') or \
+           (market_strength_score == -1 and signal_type == 'SHORT'):
+            score += 0.5  # 额外加分
+            details.append(f"✨ 信号与市场强度完美匹配")
+        else:
+            details.append("⚠️ 信号方向与市场强度不匹配，需谨慎")
     
     # 限制分数在0-10之间
     score = max(0, min(10, score))
     
-    # 质量等级判断
+    # 质量等级判断（根据最终分数）
     if score >= 8:
         quality_level = "🟢"
         quality_text = "优质信号"

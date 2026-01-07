@@ -50,9 +50,15 @@ class DayTradingSignalGenerator(bt.Strategy):
         self.ema_fast = bt.indicators.EMA(self.data, period=self.params.short_ma_period)
         self.ema_slow = bt.indicators.EMA(self.data, period=self.params.long_ma_period)
         
-        # 添加唐奇安通道到主图
+        # 计算交易周期唐奇安通道
         self.donchian = DonchianChannel(
             self.data,
+            period=self.p.donchian_period
+        )
+        
+        # 计算入场周期的唐奇安通道，用于入场点使用
+        self.enter_donchian = DonchianChannel(
+            self.data2,
             period=self.p.donchian_period
         )
         
@@ -379,6 +385,10 @@ class DayTradingSignalGenerator(bt.Strategy):
             'donchian_mid' : round(self.donchian.lines.middle[0], 2),
             'donchian_down' : round(self.donchian.lines.lower[0], 2),
             'donchian_channel_size' : round(abs(self.donchian.lines.upper[0] - self.donchian.lines.lower[0]), 2),
+            'enter_donchian_up' : round(self.enter_donchian.lines.upper[0], 2), 
+            'enter_donchian_mid' : round(self.enter_donchian.lines.middle[0], 2),
+            'enter_donchian_down' : round(self.enter_donchian.lines.lower[0], 2),
+            'enter_donchian_channel_size' : round(abs(self.enter_donchian.lines.upper[0] - self.enter_donchian.lines.lower[0]), 2),
             'value_size' : round(current_up_channel - current_down_channel),
             # 穿透值相关
             'penetration_up_depth': round(self.penetration_up_depth, 2),
@@ -639,21 +649,24 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
     try:
         # 这里使用您提供的数据获取代码
         df_15min = ak.futures_zh_minute_sina(symbol=symbol, period=15)
-        df_1hour = ak.futures_zh_minute_sina(symbol=symbol, period=60)
+        df_4hour = ak.futures_zh_minute_sina(symbol=symbol, period=240)
+        df_1min = ak.futures_zh_minute_sina(symbol=symbol, period=1) 
         
         # 数据预处理
         df_15min['datetime'] = pd.to_datetime(df_15min['datetime'])
         df_15min = df_15min.sort_values('datetime')
+        df_4hour['datetime'] = pd.to_datetime(df_4hour['datetime'])
+        df_4hour = df_4hour.sort_values('datetime')
+        df_1min['datetime'] = pd.to_datetime(df_1min['datetime'])
+        df_1min = df_1min.sort_values('datetime')
         
-        df_1hour['datetime'] = pd.to_datetime(df_1hour['datetime'])
-        df_1hour = df_1hour.sort_values('datetime')
-        
-        print(f"30分钟数据: {df_15min.tail()}")
-        print(f"1小时数据: {df_1hour.tail()}")        
+        # print(f"30分钟数据: {df_15min.tail()}")
+        # print(f"1小时数据: {df_4hour.tail()}")        
         
         # 创建数据源
         data_15min = FuturesDataFeed(dataname=df_15min)
-        data_1hour = FuturesDataFeed(dataname=df_1hour)
+        data_4hour = FuturesDataFeed(dataname=df_4hour)
+        data_1min = FuturesDataFeed(dataname=df_1min)
         
         # print(df_15min)
         # 创建回测引擎
@@ -663,7 +676,8 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
         
         # 添加数据
         cerebro.adddata(data_15min)  # 主数据（15分钟）
-        cerebro.adddata(data_1hour)  # 趋势数据（1小时）
+        cerebro.adddata(data_4hour)  # 趋势数据（4小时）
+        cerebro.adddata(data_1min) #用于计算进场位置
          
         # 添加策略
         cerebro.addstrategy(DayTradingSignalGenerator, 
@@ -724,6 +738,11 @@ def print_signals_summary(result):
         print(f"   建议做空卖出价: {signal['suggested_sell_short']}")
         print(f"   离做多买入价距离: {signal['distance_to_buy']}")
         print(f"   离做空卖出价距离: {signal['distance_to_sell']}")
+        print(f"   入场唐齐安上通道: {signal['enter_donchian_up']}")
+        print(f"   入场唐齐安下通道: {signal['enter_donchian_down']}")
+        print(f"   交易唐齐安上通道: {signal['donchian_up']}")
+        print(f"   交易唐齐安下通道: {signal['donchian_down']}")
+        
         
         print("-" * 30)
 

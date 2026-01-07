@@ -117,7 +117,12 @@ class TestStrategy(bt.Strategy):
     def next(self):
         current_up_channel = self.value_channel.lines.up_channel[0]
         current_down_channel = self.value_channel.lines.down_channel[0]
-        print(f"时间={self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M')} atr={self.atr[0]}，价值上通道={current_up_channel}, 价值下通道={current_down_channel}")
+        donchian_up = round(self.donchian.lines.upper[0], 2)
+        donchian_mid = round(self.donchian.lines.middle[0], 2)
+        donchian_down = round(self.donchian.lines.lower[0], 2)
+
+        
+        print(f"时间={self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M')} 突破上通道={donchian_up} 突破中通道={donchian_mid} 突破下通道={donchian_down} atr={self.atr[0]}，价值上通道={current_up_channel}, 价值下通道={current_down_channel}")
 
 def parse_args():
     '''
