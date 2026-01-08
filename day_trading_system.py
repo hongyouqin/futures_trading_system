@@ -16,7 +16,6 @@ import time
 import json
 import os
 
-from sql.future_data_manager_mysql import FutureDataManagerMysql
 from tool import send_swing_signal_to_dingding, send_to_dingding
 
 # 信号记录文件路径
@@ -29,9 +28,6 @@ SWING_SIGNAL_HISTORY_FILE = 'swing_signal_history.json'
 # SYMBOLS_CONFIG_FILE = 'overnight_symbols_config.xlsx'
 
 symbol_to_name_dict = None
-
-# 期货数据管理，mysql版本
-fdmm: FutureDataManagerMysql = None
 
 
 
