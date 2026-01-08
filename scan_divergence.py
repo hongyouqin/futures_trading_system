@@ -214,7 +214,7 @@ class FuturesDivergenceReporter:
         except Exception as e:
             print(f"❌ 读取品种配置文件失败: {e}")
     
-    def scan_all_futures(self, intervals=['60', '30']):
+    def scan_all_futures(self, intervals=['60', '30', '15']):
         """扫描所有期货品种的背离信号"""
         print(f"\n{'='*60}")
         print(f"📊 开始扫描背离信号 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -528,29 +528,77 @@ class FuturesDivergenceReporter:
                 print(f"🕒 信号时间范围: {earliest_time.strftime('%H:%M')} - {latest_time.strftime('%H:%M')}")
     
     def setup_schedule(self):
-        """设置定时扫描任务"""
-        # 设置定时扫描（可根据交易时间调整）
+        """设置定时扫描任务 - 只在交易时间段内扫描，每15分钟一次（优化版）"""
+        def should_scan_now():
+            """判断当前时间是否在交易时间段内"""
+            now = datetime.datetime.now()
+            current_time = now.time()
+            
+            # 定义交易时间段
+            trading_periods = [
+                (datetime.time(8, 45), datetime.time(11, 30)),   # 上午
+                (datetime.time(12, 30), datetime.time(13, 0)),   # 午间
+                (datetime.time(13, 25), datetime.time(15, 15)),  # 下午
+                (datetime.time(20, 45), datetime.time(23, 30)),  # 夜盘
+            ]
+            
+            return any(start <= current_time <= end for start, end in trading_periods)
         
-        # 开盘前扫描
-        schedule.every().day.at("08:45").do(self.scan_all_futures)
+        def conditional_scan():
+            """条件扫描：只在交易时间段内执行"""
+            if should_scan_now():
+                self.scan_all_futures()
         
-        # 盘中定时扫描
-        for minute in [0, 30]:
-            schedule.every().hour.at(f":{minute:02d}").do(
-                lambda: self.scan_all_futures(intervals=['30', '60'])
-            )
+        def conditional_scan_intervals():
+            """条件扫描：只在交易时间段内执行，带时间周期"""
+            if should_scan_now():
+                self.scan_all_futures()
         
-        # 午间扫描
-        schedule.every().day.at("12:30").do(self.scan_all_futures)
+        # 设置关键时间点的扫描
+        key_times = [
+            ("08:45", conditional_scan),          # 开盘前
+            ("12:30", conditional_scan),          # 午间
+            ("15:15", conditional_scan),          # 收盘后
+            ("20:45", conditional_scan),          # 夜盘开始
+        ]
         
-        # 收盘后扫描
-        schedule.every().day.at("15:15").do(self.scan_all_futures)
+        for time_str, func in key_times:
+            schedule.every().day.at(time_str).do(func)
         
-        print("⏰ 定时任务已设置:")
-        print("  08:45 - 开盘前扫描")
-        print("  每30分钟 - 盘中扫描 (30分钟和60分钟周期)")
-        print("  12:30 - 午间扫描")
-        print("  15:15 - 收盘后扫描")
+        # 定义交易时间段，用于生成扫描时间点
+        trading_hours = [
+            # (开始小时, 开始分钟, 结束小时, 结束分钟)
+            (8, 45, 11, 30),   # 上午
+            (12, 30, 13, 0),   # 午间
+            (13, 25, 15, 15),  # 下午
+            (20, 45, 23, 30),  # 夜盘
+        ]
+        
+        # 生成每15分钟的时间点
+        for start_hour, start_min, end_hour, end_min in trading_hours:
+            hour = start_hour
+            
+            while hour <= end_hour:
+                for minute in [0, 15, 30, 45]:
+                    # 检查时间是否在当前时间段内
+                    if hour == start_hour and minute < start_min:
+                        continue
+                    if hour == end_hour and minute > end_min:
+                        continue
+                    if hour < start_hour or hour > end_hour:
+                        continue
+                    
+                    # 跳过已经单独设置的关键时间点
+                    time_str = f"{hour:02d}:{minute:02d}"
+                    if time_str in ["08:45", "12:30", "15:15", "20:45"]:
+                        continue
+                    
+                    # 设置扫描任务
+                    schedule.every().day.at(time_str).do(conditional_scan_intervals)
+                
+                hour += 1
+        
+        print("⏰ 定时任务已设置 - 只在交易时间段内每15分钟扫描")
     
     def run_scheduled_scans(self):
         """运行定时扫描"""
@@ -559,7 +607,7 @@ class FuturesDivergenceReporter:
         
         # 首次立即执行一次扫描
         print("\n🎯 执行首次扫描...")
-        self.scan_all_futures(intervals=['60', '30'])
+        self.scan_all_futures()
         
         # 设置定时任务
         self.setup_schedule()

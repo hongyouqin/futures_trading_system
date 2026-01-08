@@ -100,8 +100,22 @@ def send_custom_robot_group_message(access_token, secret, msg, at_user_ids=None,
     except requests.exceptions.RequestException as e:
         print(f"钉钉消息发送失败: {e}")
         return {"errcode": -1, "errmsg": str(e)}
+    
+def send_swing_signal_to_dingding(signal):
+        # 创建完整的Markdown消息
+    markdown_msg = format_swing_signal_as_markdown(
+        signal_dict=signal
+    )
+    
+    # 发送到钉钉
+    send_custom_robot_group_message(
+        access_token="c1bd4f9c9f3fd282c322e5c8dcbb04431ab5b7748b318120e3f5b578e28d21f1",
+        secret="SEC4e8ba1375cc55c628922fe1daf9a9e7c75d26cefd1fc389eaad1989f6990d3b4",
+        msg=markdown_msg,
+        is_at_all=True,
+        msg_type="markdown"
+    )
 
-# 3. 改进你的 send_to_dingding 函数，使用更友好的格式
 def send_to_dingding(signal, symbol=None, symbol_to_name_dict=None):
     '''
     发送交易信号到钉钉群（完整信息版）
@@ -300,6 +314,149 @@ def get_contract_data(csv_path: str, target_symbol: str) -> Dict:
             'error_type': type(e).__name__
         }
 
+def format_swing_signal_as_markdown(signal_dict):
+    """将交易信号格式化为钉钉Markdown消息（带信号质量评估）"""
+    # 处理时间戳
+    timestamp = signal_dict.get('timestamp')
+    if isinstance(timestamp, datetime):
+        time_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+    else:
+        time_str = str(timestamp)
+    
+    # 获取合约名称
+    symbol = signal_dict.get('symbol')
+    symbol_name = signal_dict.get('symbol_name')
+    
+    # 信号类型颜色标识
+    signal_type = signal_dict.get('signal_type', 'UNKNOWN')
+    if signal_type == 'LONG':
+        signal_display = '🟢 做多 LONG'
+        action_text = '考虑做多'
+    elif signal_type == 'SHORT':
+        signal_display = '🔴 做空 SHORT'
+        action_text = '考虑做空'
+    else:
+        signal_display = f'⚪ {signal_type}'
+        action_text = '保持观望'
+    
+    # 趋势方向判断
+    trend = signal_dict.get('trend', 0)
+    if trend == 1:
+        trend_display = '📈 上涨'
+    elif trend == -1:
+        trend_display = '📉 下跌'
+    else:
+        trend_display = '➡️ 震荡'
+    
+    # ========== 新增：信号质量评估 ==========
+    quality_score, quality_details, quality_level, quality_text = evaluate_signal_quality(signal_dict)
+    recommendation = get_trading_recommendation(quality_score, signal_type)
+    
+    # ========== 计算止损点数 ==========
+    atr = float(signal_dict.get('atr', 0))
+    stop_loss_points = int(round(atr * 2))  # 2倍ATR，取整数
+    trend_strong = float(signal_dict.get('trend_strong', 2))
+    
+    # ========== 根据信号类型显示交易建议 ==========
+    trading_suggestion_text = ""
+    if signal_type == 'LONG':
+        suggested_price = float(signal_dict.get('suggested_buy_long', 0))
+        distance = float(signal_dict.get('distance_to_buy', 0))
+        trading_suggestion_text = f"""#### 🎮 交易建议
+- **当前价格**：`{signal_dict.get('price', 0):.2f}`
+- **5分钟入场价**：`{signal_dict.get('enter_donchian_up', 0)}`
+- **均线穿透入场**：`{suggested_price:.2f}`
+- **向上突破价位**：`{signal_dict.get('donchian_up', 0)}`
+- **距做多点**：`{distance:.2f}`
+- **止损点数**：`{stop_loss_points}`
+- **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
+- **趋势**：`{trend_display}`
+- **趋势强度**：`{trend_strong:.2f}`
+
+"""
+    elif signal_type == 'SHORT':
+        suggested_price = float(signal_dict.get('suggested_sell_short', 0))
+        distance = float(signal_dict.get('distance_to_sell', 0))
+        trading_suggestion_text = f"""#### 🎮 交易建议
+- **当前价格**：`{signal_dict.get('price', 0):.2f}`
+- **5分钟入场价**：`{signal_dict.get('enter_donchian_down', 0)}`
+- **均线穿透入场**：`{suggested_price:.2f}`
+- **突破价位**：`{signal_dict.get('donchian_down', 0)}`
+- **距做空点**：`{distance:.2f}`
+- **止损点数**：`{stop_loss_points}`
+- **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
+- **趋势**：`{trend_display}`
+- **趋势强度**：`{trend_strong:.2f}`
+"""
+    else:
+        # 如果是观望信号，显示所有信息
+        suggested_buy_long = float(signal_dict.get('suggested_buy_long', 0))
+        distance_to_buy = float(signal_dict.get('distance_to_buy', 0))
+        suggested_sell_short = float(signal_dict.get('suggested_sell_short', 0))
+        distance_to_sell = float(signal_dict.get('distance_to_sell', 0))
+        trading_suggestion_text = f"""#### 🎮 交易建议
+- **当前价格**：`{signal_dict.get('price', 0):.2f}`
+- **做多入场**：`{suggested_buy_long:.2f}`
+- **距做多点**：`{distance_to_buy:.2f}`
+- **做空入场**：`{suggested_sell_short:.2f}`
+- **距做空点**：`{distance_to_sell:.2f}`
+- **止损点数**：`{stop_loss_points}`
+- **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
+- **趋势**：`{trend_display}`
+- **趋势强度**：`{trend_strong:.2f}`
+"""
+    
+    # 获取主力合约数据
+    result = get_contract_data(csv_path="./reports/lastest_trend_analysis.csv", target_symbol=symbol)
+    main_contract_info = None
+    if result["success"]:
+        main_contract_info = f"{result['main_contract']['symbol']}|{result['main_contract']['trend_text']}|{result['main_contract']['market_strength']}"
+    
+    # ========== 构建Markdown消息 ==========
+    markdown_text = f"""### 🚀 30分钟波段期货交易信号
+
+**{signal_display}** | **{action_text}**
+
+---
+
+#### 📋 合约信息
+- **合约名称**：{symbol_name if symbol_name else '未知'}
+- **合约代码**：`{symbol if symbol else 'N/A'}`
+- **信号时间**：{time_str}
+- **信号质量**：{quality_level} **{quality_score}/10** ({quality_text})
+- **日趋势**：{main_contract_info}
+
+{trading_suggestion_text}
+
+### 💡 操作建议
+- {recommendation['icon']} **{recommendation['action']}**
+- 📊 **建议仓位**：{recommendation['position_size']}
+- ⚠️ **风险等级**：{recommendation['risk_level']}
+- 💡 **策略建议**：{recommendation['suggestion']}
+
+#### 🎯 技术指标
+- **均线指标**：EMA快线=`{signal_dict.get('ema_fast', 0):.2f}` | EMA慢线=`{signal_dict.get('ema_slow', 0):.2f}`
+- **动量指标**：RSI=`{signal_dict.get('rsi', 0):.2f}` | 力度指数=`{signal_dict.get('force_index', 0):.2f}` | ATR=`{signal_dict.get('atr', 0):.2f}`
+- **价值通道**：上通道=`{signal_dict.get('value_up_channel', 0):.2f}` | 下通道=`{signal_dict.get('value_down_channel', 0):.2f}` | 大小=`{signal_dict.get('value_size', 0)}`
+- **突破通道**：上轨=`{signal_dict.get('donchian_up', 0)}` | 中轨=`{signal_dict.get('donchian_mid', 0)}` | 下轨=`{signal_dict.get('donchian_down', 0)}` | 大小=`{signal_dict.get('donchian_channel_size', 0)}`
+
+#### 🏆 信号质量评估
+**评估详情：**
+"""
+    # 添加评估详情
+    for detail in quality_details:
+        markdown_text += f"- {detail}\n"
+    
+    # 添加风险提示
+    markdown_text += f"""
+---
+
+> ⚠️ **信号选择**：信号质量大于5以上的信号为佳
+> 📊 **入场提示**：建议在1分钟或5分钟周期趋势向上时进场 \n
+> 🛡️ **止损保护**：建议严格执行`{stop_loss_points}`点止损
+"""
+    
+    return markdown_text
 
 def format_signal_as_markdown(signal_dict, symbol=None, symbol_to_name_dict=None):
     """将交易信号格式化为钉钉Markdown消息（带信号质量评估）"""
