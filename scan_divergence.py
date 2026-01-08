@@ -531,15 +531,15 @@ class FuturesDivergenceReporter:
         """设置定时扫描任务 - 只在交易时间段内扫描，每15分钟一次（优化版）"""
         def should_scan_now():
             """判断当前时间是否在交易时间段内"""
-            now = datetime.datetime.now()
+            now = datetime.now()
             current_time = now.time()
             
             # 定义交易时间段
             trading_periods = [
-                (datetime.time(8, 45), datetime.time(11, 30)),   # 上午
-                (datetime.time(12, 30), datetime.time(13, 0)),   # 午间
-                (datetime.time(13, 25), datetime.time(15, 15)),  # 下午
-                (datetime.time(20, 45), datetime.time(23, 30)),  # 夜盘
+                (time(8, 45), time(11, 30)),   # 上午
+                (time(12, 30), time(13, 0)),   # 午间
+                (time(13, 25), time(15, 15)),  # 下午
+                (time(20, 45), time(23, 30)),  # 夜盘
             ]
             
             return any(start <= current_time <= end for start, end in trading_periods)
