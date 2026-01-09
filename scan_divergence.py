@@ -528,7 +528,7 @@ class FuturesDivergenceReporter:
                 print(f"🕒 信号时间范围: {earliest_time_val.strftime('%H:%M')} - {latest_time_val.strftime('%H:%M')}")
     
     def setup_schedule(self):
-        """设置定时扫描任务 - 只在交易时间段内扫描，每15分钟一次（优化版）"""
+        """设置定时扫描任务 - 只在交易时间段内扫描，每5分钟一次（优化版）"""
         def should_scan_now():
             """判断当前时间是否在交易时间段内"""
             now = datetime.now()
@@ -574,12 +574,12 @@ class FuturesDivergenceReporter:
             (20, 45, 23, 30),  # 夜盘
         ]
         
-        # 生成每15分钟的时间点
+        # 生成每5分钟的时间点
         for start_hour, start_min, end_hour, end_min in trading_hours:
             hour = start_hour
             
             while hour <= end_hour:
-                for minute in [0, 15, 30, 45]:
+                for minute in range(0, 60, 5):  # 改为每5分钟
                     # 检查时间是否在当前时间段内
                     if hour == start_hour and minute < start_min:
                         continue
@@ -598,7 +598,7 @@ class FuturesDivergenceReporter:
                 
                 hour += 1
         
-        print("⏰ 定时任务已设置 - 只在交易时间段内每15分钟扫描")
+        print("⏰ 定时任务已设置 - 只在交易时间段内每5分钟扫描")
     
     def run_scheduled_scans(self):
         """运行定时扫描"""
