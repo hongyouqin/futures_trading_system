@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 import akshare as ak
 import schedule
-import time
+import time as time_module  # 重命名避免冲突
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as datetime_time  # 区分开
 import warnings
 
 from tool import send_markdown_to_dingding
@@ -222,14 +222,14 @@ class FuturesDivergenceReporter:
         print('='*60)
         
         all_signals_list = []
-        start_time = time.time()
+        start_time = time_module.time()
         
         # 遍历所有品种和周期
         for idx, symbol in enumerate(self.symbols, 1):
             print(f"  [{idx}/{len(self.symbols)}] 扫描 {symbol}...")
             for interval in intervals:
                 signals = scan_single_futures(symbol, interval)
-                time.sleep(random.uniform(1, 5))  # 降低延迟，加快扫描速度
+                time_module.sleep(random.uniform(1, 5))  # 降低延迟，加快扫描速度
                 if not signals.empty:
                     # 添加品种名称
                     if symbol in self.symbol_to_name_dict:
@@ -239,7 +239,7 @@ class FuturesDivergenceReporter:
                     
                     all_signals_list.append(signals)
         
-        scan_duration = time.time() - start_time
+        scan_duration = time_module.time() - start_time
         
         if all_signals_list:
             # 合并所有信号
@@ -391,11 +391,11 @@ class FuturesDivergenceReporter:
             report_lines.append(f"  - {interval}: {count}个信号")
         
         # 今日信号时间范围
-        earliest = today_signals['signal_time'].min()
-        latest = today_signals['signal_time'].max()
+        earliest_time_val = today_signals['signal_time'].min()
+        latest_time_val = today_signals['signal_time'].max()
         report_lines.append(f"\n- **信号时间范围**:")
-        report_lines.append(f"  - 最早: {earliest.strftime('%H:%M')}")
-        report_lines.append(f"  - 最新: {latest.strftime('%H:%M')}")
+        report_lines.append(f"  - 最早: {earliest_time_val.strftime('%H:%M')}")
+        report_lines.append(f"  - 最新: {latest_time_val.strftime('%H:%M')}")
         
         # 背离强度统计
         avg_strength = today_signals['divergence_strength'].mean()
@@ -523,9 +523,9 @@ class FuturesDivergenceReporter:
             
             # 显示最新信号时间
             if not self.latest_signals.empty:
-                latest_time = self.latest_signals['signal_time'].max()
-                earliest_time = self.latest_signals['signal_time'].min()
-                print(f"🕒 信号时间范围: {earliest_time.strftime('%H:%M')} - {latest_time.strftime('%H:%M')}")
+                latest_time_val = self.latest_signals['signal_time'].max()
+                earliest_time_val = self.latest_signals['signal_time'].min()
+                print(f"🕒 信号时间范围: {earliest_time_val.strftime('%H:%M')} - {latest_time_val.strftime('%H:%M')}")
     
     def setup_schedule(self):
         """设置定时扫描任务 - 只在交易时间段内扫描，每15分钟一次（优化版）"""
@@ -536,10 +536,10 @@ class FuturesDivergenceReporter:
             
             # 定义交易时间段
             trading_periods = [
-                (time(8, 45), time(11, 30)),   # 上午
-                (time(12, 30), time(13, 0)),   # 午间
-                (time(13, 25), time(15, 15)),  # 下午
-                (time(20, 45), time(23, 30)),  # 夜盘
+                (datetime_time(8, 45), datetime_time(11, 30)),   # 上午
+                (datetime_time(12, 30), datetime_time(13, 0)),   # 午间
+                (datetime_time(13, 25), datetime_time(15, 15)),  # 下午
+                (datetime_time(20, 45), datetime_time(23, 30)),  # 夜盘
             ]
             
             return any(start <= current_time <= end for start, end in trading_periods)
@@ -616,7 +616,7 @@ class FuturesDivergenceReporter:
         try:
             while True:
                 schedule.run_pending()
-                time.sleep(1)
+                time_module.sleep(1)
                 
         except KeyboardInterrupt:
             print("\n\n👋 程序已停止")
