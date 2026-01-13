@@ -8,8 +8,8 @@ class MovingAverageCrossOver(bt.Indicator):
     lines = ('trend', 'trend_start_price', 'consolidation', 'ma_spread_ratio')
     
     params = (
-        ('short_ma_period', 13),      # 短期均线周期
-        ('long_ma_period', 34),       # 长期均线周期
+        ('short_ma_period', 8),      # 短期均线周期
+        ('long_ma_period', 21),       # 长期均线周期
         ('adx_period', 14),           # ADX计算周期
         ('adx_threshold', 22.0),      # ADX趋势强度阈值
         ('ma_spread_threshold', 0.005),  # 均线粘合阈值（0.5%）
