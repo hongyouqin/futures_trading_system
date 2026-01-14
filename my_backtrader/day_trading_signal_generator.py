@@ -691,7 +691,8 @@ def run_strategy_with_swing_signals(symbol='SA2605', initial_cash=100000.0, gene
         # 添加策略
         cerebro.addstrategy(DayTradingSignalGenerator, 
                           generate_signals_only=generate_signals_only,
-                          debug=debug_mode)
+                          debug=debug_mode,
+                          use_swing=True)
         
         # 运行策略
         print(f'初始资金: {cerebro.broker.getvalue():.2f}')
