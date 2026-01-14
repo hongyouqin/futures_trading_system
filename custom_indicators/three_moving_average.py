@@ -45,8 +45,8 @@ class TripleMAStateTracker(bt.Indicator):
         ('ma3_period', 40),
         ('adx_period', 14),
         ('adx_threshold', 22.0),
-        ('min_state_duration', 3),     # 最小状态持续时间
-        ('stability_period', 5),       # 稳定确认周期
+        ('min_state_duration', 2),     # 最小状态持续时间
+        ('stability_period', 3),       # 稳定确认周期
         ('ma_spread_threshold', 0.015), # 均线分离阈值
     )
     
@@ -181,10 +181,11 @@ class TripleMAStateTracker(bt.Indicator):
             return self.NO_CHANGE
             
         # 如果是震荡状态，需要进一步确认
-        if new_state == self.CONSOLIDATION:
-            if not self.is_consolidation_confirmed():
-                # 保持原状态
-                new_state = self.current_state
+        # if new_state == self.CONSOLIDATION:
+        #     if not self.is_consolidation_confirmed():
+        #         # 保持原状态
+        #         new_state = self.current_state
+        #         print("=========is_consolidation_confirmed==============")
         
         # 检查状态是否真的改变
         if new_state == self.current_state:
