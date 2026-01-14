@@ -10,6 +10,8 @@ from custom_indicators.dynamic_value_channel import DynamicValueChannel
 
 import pandas as pd
 import warnings
+
+from custom_indicators.three_moving_average import TripleMAStateTracker
 warnings.filterwarnings('ignore')
 
 '''
@@ -31,6 +33,7 @@ class DayTradingSignalGenerator(bt.Strategy):
         ('trail_percent', 0.1),     # 移动止损百分比
         ('debug', True),            # 调试模式
         ('generate_signals_only', False),  # 仅生成信号，不执行交易
+        ('use_swing', False), #是否是否波段模式
         ('rsi_exit_threshold', 70), # RSI离场阈值
         ('oi_lookback', 150*5),         # 持仓量分位数计算周期（5年）
         ('oi_threshold', 0.7),        # 持仓量高位阈值
@@ -43,7 +46,11 @@ class DayTradingSignalGenerator(bt.Strategy):
     
     def __init__(self):
         # 第一重滤网：1小时数据判断趋势方向
-        self.trend_indicator = MovingAverageCrossOver(self.data1)
+        # self.trend_indicator = MovingAverageCrossOver(self.data1)
+        if self.params.use_swing:
+            self.trend_state_tracker = TripleMAStateTracker(self.data1, ma1_period = 13, ma2_period= 21, ma3_period = 34)
+        else:
+            self.trend_state_tracker = TripleMAStateTracker(self.data1)
         
         # 第二重滤网：15分钟数据寻找交易机会
         self.force_index = ForceIndex(self.data, period=self.params.fi_period)
@@ -328,7 +335,8 @@ class DayTradingSignalGenerator(bt.Strategy):
         current_time = self.datas[0].datetime.datetime(0)
         
         # 第一重滤网：趋势判断
-        trend_direction = self.trend_indicator[0]
+        # trend_direction = self.trend_indicator[0]
+        trend_state_info = self.trend_state_tracker.get_state_info()
         
         # 第二重滤网：动量确认
         force_value = self.force_index[0]
@@ -363,12 +371,13 @@ class DayTradingSignalGenerator(bt.Strategy):
             price_change, volume_change, oi_change, oi_quantile
         )
         
+        print(f"===趋势状态: {trend_state_info['state_change']}; 趋势是否稳定: {trend_state_info['is_stable']}")
         
         signal_info = {
             'signal_id': self.generate_signal_id_basic(),
             'timestamp': current_time,
-            'trend': trend_direction,
-            'trend_strong': self.trend_indicator.adx[0], 
+            'trend': trend_state_info['state_change'],
+            'trend_is_stable': trend_state_info['is_stable'],
             'force_index': force_value,
             'price': current_price,
             'ema_fast': ema_fast,
@@ -400,7 +409,7 @@ class DayTradingSignalGenerator(bt.Strategy):
         }
                 
         # 多头信号逻辑
-        if trend_direction == 1:  # 上升趋势
+        if trend_state_info['state_change'] == TripleMAStateTracker.CONSOL_TO_UPTREND:  # 上升趋势
             if force_value < 0 and rsi_value < 70:   # 动量确认
                 if price_above_fast and price_above_slow:  # 价格在双EMA之上
                     signal_info['signal'] = 1
@@ -408,7 +417,7 @@ class DayTradingSignalGenerator(bt.Strategy):
                     self.log('*** 生成多头信号 ***')
         
         # 空头信号逻辑  
-        elif trend_direction == -1:  # 下降趋势
+        elif trend_state_info['state_change'] == TripleMAStateTracker.CONSOL_TO_DOWNTREND:  # 下降趋势
             if force_value > 0 and rsi_value > 40:      # 动量确认
                 if price_below_fast and price_below_slow:  # 价格在双EMA之下
                     signal_info['signal'] = -1
@@ -813,7 +822,7 @@ def print_signals_summary(result):
         print(f"   信号: {signal['signal_type']}")
         print(f"   价格: {signal['price']:.2f}")
         print(f"   RSI: {signal['rsi']:.2f}")
-        print(f"   趋势: {'上涨' if signal['trend'] == 1 else '下跌' if signal['trend'] == -1 else '震荡'}")
+        print(f"   趋势: {'上涨' if signal['trend'] == 1 else '下跌' if signal['trend'] == 2 else '震荡'}")
         print(f"   力度指数: {signal['force_index']:.2f}")
         print(f"   市場强度: {signal['market_strength']}")
         print(f"   市場分数: {signal['market_strength_score']}")
