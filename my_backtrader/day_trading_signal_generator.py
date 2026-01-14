@@ -48,7 +48,7 @@ class DayTradingSignalGenerator(bt.Strategy):
         # 第一重滤网：1小时数据判断趋势方向
         # self.trend_indicator = MovingAverageCrossOver(self.data1)
         if self.params.use_swing:
-            self.trend_state_tracker = TripleMAStateTracker(self.data1, ma1_period = 13, ma2_period= 21, ma3_period = 34)
+            self.trend_state_tracker = TripleMAStateTracker(self.data1, ma1_period = 8, ma2_period= 21, ma3_period = 34)
         else:
             self.trend_state_tracker = TripleMAStateTracker(self.data1)
         
