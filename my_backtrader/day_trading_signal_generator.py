@@ -371,7 +371,7 @@ class DayTradingSignalGenerator(bt.Strategy):
             price_change, volume_change, oi_change, oi_quantile
         )
         
-        print(f"===趋势状态: {trend_state_info['state_change']}; 趋势是否稳定: {trend_state_info['is_stable']}")
+    #    print(f"===趋势状态: {trend_state_info['state_change']}; 趋势是否稳定: {trend_state_info['is_stable']}")
         
         signal_info = {
             'signal_id': self.generate_signal_id_basic(),

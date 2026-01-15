@@ -342,13 +342,17 @@ def format_swing_signal_as_markdown(signal_dict):
         action_text = '保持观望'
     
     # 趋势方向判断
-    trend = signal_dict.get('trend', 0)
-    if trend == 1:
-        trend_display = '📈 上涨'
-    elif trend == -1:
-        trend_display = '📉 下跌'
+    state_change = signal_dict.get('trend', 0)
+    if state_change == TripleMAStateTracker.CONSOL_TO_UPTREND:
+        trend_display = '📈 自横盘转上涨'
+    elif state_change == TripleMAStateTracker.CONSOL_TO_DOWNTREND:
+        trend_display = '📈 自横盘转下跌'
+    elif state_change == TripleMAStateTracker.UPTREND_TO_CONSOL:
+        trend_display = '📈 自上涨转横盘 '
+    elif state_change == TripleMAStateTracker.DOWNTREND_TO_CONSOL:
+        trend_display = '📈 自下跌转横盘 '
     else:
-        trend_display = '➡️ 震荡'
+        trend_display = '📈 无趋势 '
     
     # ========== 新增：信号质量评估 ==========
     quality_score, quality_details, quality_level, quality_text = evaluate_signal_quality(signal_dict)
@@ -357,7 +361,8 @@ def format_swing_signal_as_markdown(signal_dict):
     # ========== 计算止损点数 ==========
     atr = float(signal_dict.get('atr', 0))
     stop_loss_points = int(round(atr * 2))  # 2倍ATR，取整数
-    trend_strong = float(signal_dict.get('trend_strong', 2))
+    trend_is_stable = float(signal_dict.get('trend_is_stable', False))
+    trend_is_stable_text = "稳定" if trend_is_stable else "不稳定"
     
     # ========== 根据信号类型显示交易建议 ==========
     trading_suggestion_text = ""
@@ -372,9 +377,6 @@ def format_swing_signal_as_markdown(signal_dict):
 - **距做多点**：`{distance:.2f}`
 - **止损点数**：`{stop_loss_points}`
 - **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
-- **趋势**：`{trend_display}`
-- **趋势强度**：`{trend_strong:.2f}`
-
 """
     elif signal_type == 'SHORT':
         suggested_price = float(signal_dict.get('suggested_sell_short', 0))
@@ -387,8 +389,6 @@ def format_swing_signal_as_markdown(signal_dict):
 - **距做空点**：`{distance:.2f}`
 - **止损点数**：`{stop_loss_points}`
 - **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
-- **趋势**：`{trend_display}`
-- **趋势强度**：`{trend_strong:.2f}`
 """
     else:
         # 如果是观望信号，显示所有信息
@@ -404,8 +404,6 @@ def format_swing_signal_as_markdown(signal_dict):
 - **距做空点**：`{distance_to_sell:.2f}`
 - **止损点数**：`{stop_loss_points}`
 - **力度指数**：`{signal_dict.get('force_index', 0):.2f}`
-- **趋势**：`{trend_display}`
-- **趋势强度**：`{trend_strong:.2f}`
 """
     
     # 获取主力合约数据
@@ -426,7 +424,9 @@ def format_swing_signal_as_markdown(signal_dict):
 - **合约代码**：`{symbol if symbol else 'N/A'}`
 - **信号时间**：{time_str}
 - **信号质量**：{quality_level} **{quality_score}/10** ({quality_text})
-- **日趋势**：{main_contract_info}
+- **信号**：`{trend_display}`
+- **信号是否稳定**：`{trend_is_stable_text}`
+- **大趋势**：{main_contract_info}
 
 {trading_suggestion_text}
 
