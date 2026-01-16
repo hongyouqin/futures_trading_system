@@ -124,35 +124,7 @@ class TripleMAStateTracker(bt.Indicator):
         max_spread = max(spreads)
         self.lines.ma_spread_ratio[0] = max_spread
         return max_spread
-    
-    def is_consolidation_confirmed(self):
-        '''确认是否为有效震荡'''
-        if len(self.data.close) < 20:
-            return False
-            
-        current_price = self.data.close[0]
         
-        # 条件1：三均线没有形成明显排列
-        ma_rel = self.calculate_ma_relationship()
-        if ma_rel != self.CONSOLIDATION:
-            return False
-            
-        # 条件2：ADX低于阈值
-        if len(self.adx) > 0 and self.adx[0] > self.p.adx_threshold:
-            return False
-            
-        # 条件3：均线粘合
-        spread_ratio = self.calculate_ma_spread()
-        if spread_ratio > self.p.ma_spread_threshold:
-            return False
-            
-        # 条件4：价格波动率低
-        atr_ratio = self.atr[0] / current_price if current_price > 0 else 0
-        if atr_ratio > 0.015:  # 波动率大于1.5%
-            return False
-            
-        return True
-    
     def get_trend_strength(self):
         '''计算趋势强度评分'''
         strength = 50  # 基础分
@@ -175,18 +147,11 @@ class TripleMAStateTracker(bt.Indicator):
         return max(0, min(100, strength))
     
     def detect_state_change(self):
-        '''检测状态变化'''
+        '''检测状态变化，并在检测到变化时更新当前状态'''
         new_state = self.calculate_ma_relationship()
         if new_state is None:
             return self.NO_CHANGE
             
-        # 如果是震荡状态，需要进一步确认
-        # if new_state == self.CONSOLIDATION:
-        #     if not self.is_consolidation_confirmed():
-        #         # 保持原状态
-        #         new_state = self.current_state
-        #         print("=========is_consolidation_confirmed==============")
-        
         # 检查状态是否真的改变
         if new_state == self.current_state:
             return self.NO_CHANGE
@@ -207,8 +172,9 @@ class TripleMAStateTracker(bt.Indicator):
         elif self.current_state == self.DOWNTREND and new_state == self.UPTREND:
             change_type = self.DOWNTREND_TO_UPTREND
             
-        # 记录状态变化
+        # 如果状态有变化，记录并更新状态
         if change_type != self.NO_CHANGE:
+            # 记录状态变化
             self.state_changes.append({
                 'date': self.data.datetime.date(0),
                 'from': self.current_state,
@@ -217,6 +183,13 @@ class TripleMAStateTracker(bt.Indicator):
                 'price': self.data.close[0]
             })
             
+            # 更新状态（在detect_state_change中直接更新）
+            self.previous_state = self.current_state
+            self.current_state = new_state
+            
+        # print(f"{self.datas[0].datetime.datetime(0)}===========打印状态 = {new_state} 当前状态={self.current_state} 状态改变={change_type}")
+
+        
         return change_type
     
     def check_state_stability(self):
@@ -277,8 +250,6 @@ class TripleMAStateTracker(bt.Indicator):
         
         # 如果状态改变，更新状态开始索引
         if state_change != self.NO_CHANGE:
-            self.previous_state = self.current_state
-            self.current_state = self.calculate_ma_relationship()
             self.state_start_idx = len(self.data)
         
         # 计算状态持续时间
@@ -293,51 +264,10 @@ class TripleMAStateTracker(bt.Indicator):
         self.lines.state_duration[0] = state_duration
         self.lines.is_stable_state[0] = int(is_stable)
         self.lines.trend_strength[0] = self.get_trend_strength()
-
-
-# 使用示例
-class TripleMAStrategy(bt.Strategy):
-    params = (
-        ('ma_state_indicator', None),
-    )
-    
-    def __init__(self):
-        # 创建三均线状态跟踪器
-        self.state_tracker = TripleMAStateTracker()
         
-    def next(self):
-        state_info = self.state_tracker.get_state_info()
-        
-        # 获取当前状态和状态变化
-        current_state = state_info['current_state']
-        state_change = state_info['state_change']
-        is_stable = state_info['is_stable']
-        
-        # 只在状态稳定时交易
-        if not is_stable:
-            return
-            
-        # 处理状态变化信号
-        if state_change == TripleMAStateTracker.CONSOL_TO_UPTREND:
-            # 震荡转上涨趋势 - 买入信号
-            if not self.position:
-                self.buy()
-                print(f"买入信号: 震荡转上涨趋势, 价格: {self.data.close[0]}")
-                
-        elif state_change == TripleMAStateTracker.CONSOL_TO_DOWNTREND:
-            # 震荡转下跌趋势 - 卖出信号
-            if self.position:
-                self.sell()
-                print(f"卖出信号: 震荡转下跌趋势, 价格: {self.data.close[0]}")
-                
-        elif state_change == TripleMAStateTracker.UPTREND_TO_CONSOL:
-            # 上涨转震荡 - 考虑减仓或止盈
-            if self.position:
-                self.sell()
-                print(f"平仓信号: 上涨转震荡, 价格: {self.data.close[0]}")
-                
-        elif state_change == TripleMAStateTracker.DOWNTREND_TO_CONSOL:
-            # 下跌转震荡 - 空头平仓或观望
-            if self.position:
-                self.close()
-                print(f"平仓信号: 下跌转震荡, 价格: {self.data.close[0]}")
+        # logging.info(f"周期时间:{self.data.datetime.datetime(0)} "
+        #          f"当前状态={self.current_state} "
+        #          f"趋势改变: {state_change}; "
+        #          f"状态历史长度: {len(self.state_history)} "
+        #          f"稳定周期要求: {self.p.stability_period} "
+        #          f"趋势是否稳定: {int(is_stable)}")

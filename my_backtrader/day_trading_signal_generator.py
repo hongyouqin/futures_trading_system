@@ -1,4 +1,5 @@
 
+import logging
 import time
 import backtrader as bt
 import akshare as ak
@@ -106,6 +107,8 @@ class DayTradingSignalGenerator(bt.Strategy):
         self.trades = []
         self.signals_log = []
         self.recent_signals = []  # 存储最近信号
+        
+        self.logger = logging.getLogger('TripleMAStateTracker')
 
     def log(self, txt, dt=None):
         '''日志函数'''
@@ -147,10 +150,10 @@ class DayTradingSignalGenerator(bt.Strategy):
             if len(self.penetration_history) > self.params.penetration_lookback_bars:
                 self.penetration_history.pop(0)
             
-            self.log(f"检测到{'向上' if up_penetration else '向下'}穿透: "
-                    f"深度={penetration_depth:.2f}, "
-                    f"价格={current_close:.2f}, "
-                    f"EMA={current_fast_ema:.2f}")
+            # self.log(f"检测到{'向上' if up_penetration else '向下'}穿透: "
+            #         f"深度={penetration_depth:.2f}, "
+            #         f"价格={current_close:.2f}, "
+            #         f"EMA={current_fast_ema:.2f}")
         
         # 计算平均穿透深度
         up_penetrations = [p['depth'] for p in self.penetration_history if p['type'] == 'up']
@@ -370,14 +373,13 @@ class DayTradingSignalGenerator(bt.Strategy):
         market_strength_text, market_strength_score = self.analyze_market_strength(
             price_change, volume_change, oi_change, oi_quantile
         )
-        
-    #    print(f"===趋势状态: {trend_state_info['state_change']}; 趋势是否稳定: {trend_state_info['is_stable']}")
-        
+                
         signal_info = {
             'signal_id': self.generate_signal_id_basic(),
             'timestamp': current_time,
-            'trend': trend_state_info['state_change'],
+            'trend': trend_state_info['current_state'],
             'trend_is_stable': trend_state_info['is_stable'],
+            'trend_strength' : trend_state_info['trend_strength'],
             'force_index': force_value,
             'price': current_price,
             'ema_fast': ema_fast,
@@ -409,7 +411,8 @@ class DayTradingSignalGenerator(bt.Strategy):
         }
                 
         # 多头信号逻辑
-        if trend_state_info['state_change'] == TripleMAStateTracker.CONSOL_TO_UPTREND:  # 上升趋势
+        signal_info['signal'] = 0
+        if trend_state_info['current_state'] == TripleMAStateTracker.CONSOL_TO_UPTREND:  # 上升趋势
             if force_value < 0 and rsi_value < 70:   # 动量确认
                 if price_above_fast and price_above_slow:  # 价格在双EMA之上
                     signal_info['signal'] = 1
@@ -417,14 +420,12 @@ class DayTradingSignalGenerator(bt.Strategy):
                     self.log('*** 生成多头信号 ***')
         
         # 空头信号逻辑  
-        elif trend_state_info['state_change'] == TripleMAStateTracker.CONSOL_TO_DOWNTREND:  # 下降趋势
+        elif trend_state_info['current_state'] == TripleMAStateTracker.CONSOL_TO_DOWNTREND:  # 下降趋势
             if force_value > 0 and rsi_value > 40:      # 动量确认
                 if price_below_fast and price_below_slow:  # 价格在双EMA之下
                     signal_info['signal'] = -1
                     signal_info['signal_type'] = 'SHORT'
                     self.log('*** 生成空头信号 ***')
-        else:
-            signal_info['signal'] = 0
         
         # 存储最近信号（仅存储有意义的信号）
         if signal_info['signal'] != 0:
@@ -435,33 +436,6 @@ class DayTradingSignalGenerator(bt.Strategy):
         
         self.signals_log.append(signal_info)
         return signal_info
-
-    def should_exit_position(self):
-        '''判断是否应该离场'''
-        if not self.position:
-            return False
-            
-        # current_price = self.data.close[0]
-        rsi_value = self.rsi[0]
-        # current_time = self.datas[0].datetime.datetime(0)
-        
-        # 持仓时间检查（避免过夜持仓）
-        # if self.entry_time and (current_time - self.entry_time).total_seconds() > 3600 * 4:  # 4小时强制平仓
-        #     self.log('达到最大持仓时间，强制平仓')
-        #     return True
-        
-        # 基于RSI的离场逻辑
-        if self.position.size > 0:  # 多头持仓
-            if rsi_value > self.params.rsi_exit_threshold:  # RSI超买离场
-                self.log(f'多头RSI超买离场: RSI={rsi_value:.2f}')
-                return True
-                
-        elif self.position.size < 0:  # 空头持仓
-            if rsi_value < (100 - self.params.rsi_exit_threshold):  # RSI超卖离场
-                self.log(f'空头RSI超卖离场: RSI={rsi_value:.2f}')
-                return True
-        
-        return False
 
     def execute_entry(self, signal_info):
         '''执行入场'''
@@ -493,41 +467,7 @@ class DayTradingSignalGenerator(bt.Strategy):
                 self.entry_time = self.datas[0].datetime.datetime(0)
                 self.log(f'执行空头入场: 价格={price:.2f}, 仓位={size}, 止损={stop_loss:.2f}')
 
-    def manage_position(self):
-        '''持仓管理'''
-        if not self.position:
-            return
-            
-        # current_price = self.data.close[0]
-        
-        # 检查RSI离场条件
-        if self.should_exit_position():
-            self.close()
-            return
-            
-        # # 移动止损逻辑
-        # if self.position.size > 0:  # 多头持仓
-        #     new_stop = current_price * (1 - self.params.trail_percent/100)
-        #     self.stop_loss = max(self.stop_loss, new_stop)
-            
-        #     if current_price <= self.stop_loss:
-        #         self.close()
-        #         self.log(f'多头止损: 价格={current_price:.2f}, 止损={self.stop_loss:.2f}')
-                
-        # elif self.position.size < 0:  # 空头持仓
-        #     new_stop = current_price * (1 + self.params.trail_percent/100)
-        #     self.stop_loss = min(self.stop_loss, new_stop)
-            
-        #     if current_price >= self.stop_loss:
-        #         self.close()
-        #         self.log(f'空头止损: 价格={current_price:.2f}, 止损={self.stop_loss:.2f}')
-
     def next(self):
-        '''主逻辑循环'''
-        # 如果有持仓，先执行持仓管理
-        if self.position:
-            self.manage_position()
-        
         # 生成交易信号
         signal_info = self.generate_signal()
         
