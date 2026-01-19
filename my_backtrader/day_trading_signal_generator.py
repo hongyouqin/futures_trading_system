@@ -13,6 +13,7 @@ import pandas as pd
 import warnings
 
 from custom_indicators.three_moving_average import TripleMAStateTracker
+from kd_scanner import kd_scanner
 warnings.filterwarnings('ignore')
 
 '''
@@ -28,8 +29,8 @@ class DayTradingSignalGenerator(bt.Strategy):
         ('fi_period', 2),           # ForceIndex计算周期
         ('atr_period', 14),         # ATR计算周期
         ('rsi_period', 14),         # RSI计算周期
-        ('short_ma_period', 8),   # 短期均线周期
-        ('long_ma_period', 21),    # 长期均线周期
+        ('short_ma_period', 10),   # 短期均线周期
+        ('long_ma_period', 20),    # 长期均线周期
         ('risk_per_trade', 0.02),   # 每笔交易风险比例
         ('trail_percent', 0.1),     # 移动止损百分比
         ('debug', True),            # 调试模式
@@ -50,13 +51,15 @@ class DayTradingSignalGenerator(bt.Strategy):
         # self.trend_indicator = MovingAverageCrossOver(self.data1)
         if self.params.use_swing:
             self.trend_state_tracker = TripleMAStateTracker(self.data1, ma1_period = 8, ma2_period= 21, ma3_period = 34)
+            self.ema_fast = bt.indicators.EMA(self.data, period=8)
+            self.ema_slow = bt.indicators.EMA(self.data, period=21)
         else:
             self.trend_state_tracker = TripleMAStateTracker(self.data1)
+            self.ema_fast = bt.indicators.EMA(self.data, period=self.params.short_ma_period)
+            self.ema_slow = bt.indicators.EMA(self.data, period=self.params.long_ma_period)
         
         # 第二重滤网：15分钟数据寻找交易机会
         self.force_index = ForceIndex(self.data, period=self.params.fi_period)
-        self.ema_fast = bt.indicators.EMA(self.data, period=self.params.short_ma_period)
-        self.ema_slow = bt.indicators.EMA(self.data, period=self.params.long_ma_period)
         
         # 计算交易周期唐奇安通道
         self.donchian = DonchianChannel(
@@ -661,6 +664,14 @@ def run_strategy_with_swing_signals(symbol='SA2605', initial_cash=100000.0, gene
         print(f"策略运行错误: {e}")
         return None
 
+def run_kd_sanner_strategy(symbol, data_df):
+    kd_scanner(
+        data_df=data_df,
+        symbol=symbol,
+        webhook_url="通知钉钉",
+        history_file="test_sent_signals.json"
+    )
+
 def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_signals_only=True, debug_mode = False):
     """
     运行策略并返回交易信号
@@ -685,8 +696,7 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
         df_4hour = ak.futures_zh_minute_sina(symbol=symbol, period=240)
         time.sleep(1)
         df_1min = ak.futures_zh_minute_sina(symbol=symbol, period=1)
-        time.sleep(1)
-        
+           
         # 数据预处理
         df_15min['datetime'] = pd.to_datetime(df_15min['datetime'])
         df_15min = df_15min.sort_values('datetime')
@@ -702,6 +712,9 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
         data_15min = FuturesDataFeed(dataname=df_15min)
         data_4hour = FuturesDataFeed(dataname=df_4hour)
         data_1min = FuturesDataFeed(dataname=df_1min)
+        
+        # 均值回归扫描
+        run_kd_sanner_strategy(data_df=df_15min.copy(), symbol= symbol)
         
         # print(df_15min)
         # 创建回测引擎
@@ -727,6 +740,7 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
         # 获取策略实例和信号
         strategy_instance = strategies[0]
         recent_signals = strategy_instance.get_recent_signals(5)
+    
         
         result = {
             'initial_cash': initial_cash,
@@ -739,6 +753,8 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
                 'total_signals': len([s for s in strategy_instance.signals_log if s['signal'] != 0])
             }
         }
+        
+        
         
         return result
         
