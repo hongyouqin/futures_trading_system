@@ -17,6 +17,7 @@ from tool import send_markdown_to_dingding
 class TradingSignal:
     """交易信号数据结构"""
     symbol: str
+    name: str
     signal_type: str  # 'LONG' 或 'SHORT'
     signal_time: datetime
     current_price: float
@@ -35,36 +36,42 @@ class TradingSignal:
         emoji = "🟢" if self.signal_type == "LONG" else "🔴"
         direction = "做多" if self.signal_type == "LONG" else "做空"
         
-        markdown = f"""## {emoji}均值回归信号 {self.symbol} {direction}
+        markdown = f"""## {emoji} 均值回归穿透监听
 
-**时间**: {self.signal_time.strftime('%Y-%m-%d %H:%M:%S')}
-**价格**: {self.current_price:.2f}
-**建议入场**: {self.entry_price:.2f}
-**信号说明**: "均值回归信号最好结合均线趋势来做，效果最好"
+    ### 🏷️ 品种<font size=4>🎯 {self.symbol} {self.name} {direction} </font>**
+    **🕐 时间**: {self.signal_time.strftime('%Y-%m-%d %H:%M:%S')}  
+    **💰 当前价格**: {self.current_price:.2f}  
+    **🎯 建议入场**: {self.entry_price:.2f}  
 
-### 📊 KD指标状态
-- **K值**: {self.k_value:.1f}
-- **D值**: {self.d_value:.1f}"""
+    ### 📋 信号概览
+    **信号说明**: 均值回归用于无趋势时
+
+    ### 📊 技术指标状态
+    **K值**: {self.k_value:.1f}  
+    **D值**: {self.d_value:.1f}"""
         
         if self.rsi > 0:
-            markdown += f"\n- **RSI**: {self.rsi:.1f}"
+            markdown += f"\n**RSI**: {self.rsi:.1f}  "
             
-        markdown += f"\n- **信号信心**: {self.confidence:.1%}"
+        markdown += f"\n**信号信心**: {self.confidence:.1%}  "
         
         if self.volume > 0:
-            markdown += f"\n- **成交量**: {self.volume:.0f}"
+            markdown += f"\n**成交量**: {self.volume:.0f}  "
         
         if self.stop_loss:
             risk_percent = abs((self.stop_loss - self.entry_price) / self.entry_price * 100)
-            markdown += f"""\n\n### 🎯 风险控制
-- **止损**: {self.stop_loss:.2f} ({risk_percent:.2f}%)"""
+            markdown += f"""\n
+    ### 🎯 风险控制
+    **止损**: {self.stop_loss:.2f} ({risk_percent:.2f}%)"""
         
         if self.take_profit:
             profit_percent = abs((self.take_profit - self.entry_price) / self.entry_price * 100)
-            markdown += f"""\n- **止盈**: {self.take_profit:.2f} ({profit_percent:.2f}%)"""
+            markdown += f"""  
+    **止盈**: {self.take_profit:.2f} ({profit_percent:.2f}%)"""
         
-        markdown += f"""\n\n### 📈 信号理由
-{self.reason}"""
+        markdown += f"""\n
+    ### 📈 信号理由
+    {self.reason}"""
         
         return markdown
     
@@ -161,6 +168,7 @@ class PureKDScannerStrategy(bt.Strategy):
         ('min_confidence', 0.5),  # 最小信号信心
         ('webhook_url', None),    # 钉钉Webhook URL
         ('min_bars', 30),        # 最少需要的数据条数
+        ('symbol_name', None),
     )
     
     def __init__(self):
@@ -199,8 +207,8 @@ class PureKDScannerStrategy(bt.Strategy):
             
             if signal:
                 self.detected_signals.append(signal)
-                print(f"📊 检测到信号: {symbol} {signal.signal_type} "
-                      f"(K:{signal.k_value:.1f}, D:{signal.d_value:.1f}, 信心:{signal.confidence:.1%})")
+                # print(f"📊 检测到信号: {symbol} {signal.signal_type} "
+                #       f"(K:{signal.k_value:.1f}, D:{signal.d_value:.1f}, 信心:{signal.confidence:.1%})")
     
     def _scan_for_kd_signal(self, symbol: str, data, current_date) -> Optional[TradingSignal]:
         """扫描KD交易信号"""
@@ -350,6 +358,7 @@ class PureKDScannerStrategy(bt.Strategy):
         
         return TradingSignal(
             symbol=symbol,
+            name = self.p.symbol_name,
             signal_type='LONG',
             signal_time=current_time,
             current_price=current_price,
@@ -415,6 +424,7 @@ class PureKDScannerStrategy(bt.Strategy):
         
         return TradingSignal(
             symbol=symbol,
+            name = self.p.symbol_name,
             signal_type='SHORT',
             signal_time=current_time,
             current_price=current_price,
@@ -534,7 +544,7 @@ def process_and_send_latest_signal(strategy, webhook_url: str, history_file: str
 
 
 # 主函数
-def kd_scanner(data_df: pd.DataFrame, symbol: str, webhook_url: str = None, history_file: str = "sent_signals.json") -> dict:
+def kd_scanner(data_df: pd.DataFrame, symbol: str, symbol_name: str=None, webhook_url: str = None, history_file: str = "sent_signals.json") -> dict:
     """
     KD信号扫描器
     Args:
@@ -554,6 +564,7 @@ def kd_scanner(data_df: pd.DataFrame, symbol: str, webhook_url: str = None, hist
         min_confidence=0.5,
         oversold_level=30,
         overbought_level=70,
+        symbol_name = symbol_name
     )
     
     # 检查数据格式

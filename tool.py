@@ -641,6 +641,7 @@ def evaluate_signal_quality(signal_dict):
     value_up = signal_dict.get('value_up_channel', 0)
     value_down = signal_dict.get('value_down_channel', 0)
     value_size = signal_dict.get('value_size', 0)
+    suggested_price = float(signal_dict.get('suggested_buy_long', 0)) if signal_type == 'LONG' else float(signal_dict.get('suggested_sell_short', 0))
     
     # === 趋势强度权重控制（核心修改）===
     trend_strength = signal_dict.get('trend_strength', 50)
@@ -795,7 +796,7 @@ def evaluate_signal_quality(signal_dict):
         ema_weight *= 0.7      # EMA重要性降低
     score += ema_score * ema_weight
     
-    # 4. 价格位置评估
+    # 4. 价格位置评估（相对于买入/卖出触发点）
     distance_score = 0
     if signal_type == 'LONG':
         if distance_to_buy < 0.5 and distance_to_buy > 0:
@@ -985,6 +986,76 @@ def evaluate_signal_quality(signal_dict):
         
         score += channel_score * channel_weight
     
+    # ===== 新增：建议价格距离评估 =====
+    print(f"==sug== {suggested_price} cur_price={price}")
+    suggested_price_score = 0
+    if suggested_price > 0 and price > 0:
+        # 计算现价与建议价格的百分比距离
+        price_distance_percent = abs((price - suggested_price) / suggested_price * 100)
+        
+        # 计算绝对距离（用于判断）
+        price_distance = abs(price - suggested_price)
+        
+        # 根据ATR来标准化距离评估（相对于市场波动性）
+        if atr > 0:
+            atr_distance_ratio = price_distance / atr
+        else:
+            # 如果ATR无效，使用价格百分比
+            atr_distance_ratio = price_distance_percent / 0.5  # 假设0.5%作为基准
+        
+        # 评估距离质量（越接近建议价格越好）
+        if atr_distance_ratio < 0.2:  # 小于0.2个ATR
+            suggested_price_score = 2.5
+            details.append(f"🎯 极近建议价格(距离{price_distance:.2f}, {price_distance_percent:.2f}%, 约{atr_distance_ratio:.1f}ATR)")
+        elif atr_distance_ratio < 0.5:  # 小于0.5个ATR
+            suggested_price_score = 1.8
+            details.append(f"✅ 接近建议价格(距离{price_distance:.2f}, {price_distance_percent:.2f}%, 约{atr_distance_ratio:.1f}ATR)")
+        elif atr_distance_ratio < 1.0:  # 小于1个ATR
+            suggested_price_score = 0.8
+            details.append(f"⚠️ 中等距离建议价格(距离{price_distance:.2f}, {price_distance_percent:.2f}%, 约{atr_distance_ratio:.1f}ATR)")
+        elif atr_distance_ratio < 1.5:  # 小于1.5个ATR
+            suggested_price_score = -0.5
+            details.append(f"⚠️ 较远建议价格(距离{price_distance:.2f}, {price_distance_percent:.2f}%, 约{atr_distance_ratio:.1f}ATR)")
+        else:  # 大于1.5个ATR
+            suggested_price_score = -1.5
+            details.append(f"❌ 远离建议价格(距离{price_distance:.2f}, {price_distance_percent:.2f}%, 约{atr_distance_ratio:.1f}ATR)")
+        
+        # 额外检查：价格是否在建议价格的正确方向
+        if signal_type == 'LONG':
+            # 做多信号：当前价格应低于或接近建议价格
+            if price < suggested_price:
+                direction_bonus = 0.5
+                suggested_price_score += direction_bonus
+                details.append(f"📈 价格低于建议价，做多时机良好 +{direction_bonus:.1f}分")
+            elif price > suggested_price:
+                direction_penalty = -0.8
+                suggested_price_score += direction_penalty
+                details.append(f"⚠️ 价格高于建议价，做多需谨慎 {direction_penalty:.1f}分")
+                
+        elif signal_type == 'SHORT':
+            # 做空信号：当前价格应高于或接近建议价格
+            if price > suggested_price:
+                direction_bonus = 0.5
+                suggested_price_score += direction_bonus
+                details.append(f"📉 价格高于建议价，做空时机良好 +{direction_bonus:.1f}分")
+            elif price < suggested_price:
+                direction_penalty = -0.8
+                suggested_price_score += direction_penalty
+                details.append(f"⚠️ 价格低于建议价，做空需谨慎 {direction_penalty:.1f}分")
+        
+        # 根据趋势强度调整建议价格距离的权重
+        suggested_price_weight = trend_strength_multiplier
+        if trend_strength >= 70:  # 强趋势中，接近建议价格更重要
+            suggested_price_weight *= 1.3
+            details.append("🚀 强趋势中，接近建议价格的重要性提高")
+        elif trend_strength < 40:  # 无趋势中，位置重要性降低
+            suggested_price_weight *= 0.7
+            details.append("🌫️ 无趋势中，建议价格距离的重要性降低")
+        
+        score += suggested_price_score * suggested_price_weight
+    else:
+        details.append("⚠️ 缺少建议价格或现价数据，无法评估价格接近度")
+    
     # 9. 添加趋势强度基础加分/减分
     score += trend_strength_bonus
     
@@ -1036,6 +1107,11 @@ def evaluate_signal_quality(signal_dict):
         quality_text += " | 趋势稳定"
     elif trend_strength >= 60 and not trend_is_stable:
         quality_text += " | 趋势不稳定"
+    
+    # 添加建议价格信息（如果可用）
+    if suggested_price > 0:
+        distance_percent = abs((price - suggested_price) / suggested_price * 100)
+        quality_text += f" | 距建议价:{distance_percent:.1f}%"
     
     return round(score, 1), details, quality_level, quality_text
 

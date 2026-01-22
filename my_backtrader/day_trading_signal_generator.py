@@ -664,15 +664,16 @@ def run_strategy_with_swing_signals(symbol='SA2605', initial_cash=100000.0, gene
         print(f"策略运行错误: {e}")
         return None
 
-def run_kd_sanner_strategy(symbol, data_df):
+def run_kd_sanner_strategy(symbol, data_df, symbol_name):
     kd_scanner(
         data_df=data_df,
         symbol=symbol,
+        symbol_name= symbol_name, 
         webhook_url="通知钉钉",
         history_file="test_sent_signals.json"
     )
 
-def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_signals_only=True, debug_mode = False):
+def run_strategy_with_signals(symbol='SA0', name='', initial_cash=100000.0, generate_signals_only=True, debug_mode = False):
     """
     运行策略并返回交易信号
     
@@ -712,9 +713,8 @@ def run_strategy_with_signals(symbol='SA0', initial_cash=100000.0, generate_sign
         data_15min = FuturesDataFeed(dataname=df_15min)
         data_4hour = FuturesDataFeed(dataname=df_4hour)
         data_1min = FuturesDataFeed(dataname=df_1min)
-        
-        # 均值回归扫描
-        run_kd_sanner_strategy(data_df=df_15min.copy(), symbol= symbol)
+
+        run_kd_sanner_strategy(data_df=df_15min.copy(), symbol= symbol, symbol_name= name)
         
         # print(df_15min)
         # 创建回测引擎
