@@ -467,7 +467,11 @@ def scheduled_swing_signal_generation(symbols, gso=True, receiver_email=None):
     for symbol in symbols:
         logging.info(f"\n🔍 分析品种 ({analyzed_count + 1}/{len(symbols)}): {symbol}")
         try:
-            result = run_strategy_with_swing_signals(symbol=symbol, generate_signals_only=gso)
+            
+            symbol_name = None
+            if symbol and symbol_to_name_dict:
+                symbol_name = symbol_to_name_dict.get(symbol)
+            result = run_strategy_with_swing_signals(symbol=symbol, generate_signals_only=gso, name= symbol_name)
             analyzed_count += 1
             
             if result and result['recent_signals']:

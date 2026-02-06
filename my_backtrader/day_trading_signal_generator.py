@@ -416,7 +416,7 @@ class DayTradingSignalGenerator(bt.Strategy):
         # 多头信号逻辑
         signal_info['signal'] = 0
         if trend_state_info['current_state'] == TripleMAStateTracker.CONSOL_TO_UPTREND:  # 上升趋势
-            if force_value < 0 and rsi_value < 70:   # 动量确认
+            if force_value < 0 and rsi_value < 30:   # 动量确认
                 if price_above_fast and price_above_slow:  # 价格在双EMA之上
                     signal_info['signal'] = 1
                     signal_info['signal_type'] = 'LONG'
@@ -424,7 +424,7 @@ class DayTradingSignalGenerator(bt.Strategy):
         
         # 空头信号逻辑  
         elif trend_state_info['current_state'] == TripleMAStateTracker.CONSOL_TO_DOWNTREND:  # 下降趋势
-            if force_value > 0 and rsi_value > 40:      # 动量确认
+            if force_value > 0 and rsi_value > 70:      # 动量确认
                 if price_below_fast and price_below_slow:  # 价格在双EMA之下
                     signal_info['signal'] = -1
                     signal_info['signal_type'] = 'SHORT'
@@ -580,7 +580,7 @@ class FuturesDataFeed(bt.feeds.PandasData):
         ('openinterest', 'hold'),
     )
 
-def run_strategy_with_swing_signals(symbol='SA2605', initial_cash=100000.0, generate_signals_only=True, debug_mode = False):
+def run_strategy_with_swing_signals(symbol='SA2605',name='', initial_cash=100000.0, generate_signals_only=True, debug_mode = False):
     """
     运行策略并返回交易信号
     
@@ -619,6 +619,8 @@ def run_strategy_with_swing_signals(symbol='SA2605', initial_cash=100000.0, gene
         data_daily = FuturesDataFeed(dataname=df_daily)
         data_30min = FuturesDataFeed(dataname=df_30min)
         data_5min = FuturesDataFeed(dataname=df_5min)
+        
+        run_kd_sanner_strategy(data_df=df_30min.copy(), symbol= symbol, symbol_name= name)
         
         # print(df_15min)
         # 创建回测引擎
